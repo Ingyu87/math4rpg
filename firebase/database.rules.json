@@ -1,0 +1,42 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+    "classrooms": {
+      "$classCode": {
+        ".read": "auth != null",
+        ".write": "auth != null"
+      }
+    },
+    "teachers": {
+      "$teacherUid": {
+        ".read": "auth != null && auth.uid === $teacherUid",
+        ".write": "auth != null && auth.uid === $teacherUid"
+      }
+    },
+    "students": {
+      "$studentUid": {
+        ".read": "auth != null",
+        ".write": "auth != null || (!auth && newData.child('classCode').isString())"
+      }
+    },
+    "groups": {
+      "$groupId": {
+        ".read": true,
+        ".write": true,
+        "members": {
+          "$studentUid": {
+            ".read": true,
+            ".write": true
+          }
+        }
+      }
+    },
+    "activityLogs": {
+      "$groupId": {
+        ".read": "auth != null",
+        ".write": true
+      }
+    }
+  }
+}

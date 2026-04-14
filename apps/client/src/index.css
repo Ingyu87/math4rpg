@@ -1,0 +1,22 @@
+* {
+  box-sizing: border-box;
+}
+
+:root {
+  font-family: "Pretendard", "Noto Sans KR", system-ui, sans-serif;
+  color: #3a4327;
+  line-height: 1.4;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  background:
+    radial-gradient(circle at 20% 20%, #f4ffd8 0%, transparent 28%),
+    radial-gradient(circle at 80% 12%, #fff0c4 0%, transparent 30%),
+    linear-gradient(180deg, #d7f0ba 0%, #f4ffdd 42%, #fff8e8 100%);
+}
+
+#root {
+  min-height: 100vh;
+}
