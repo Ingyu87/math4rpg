@@ -19,7 +19,7 @@ export default function AppShell({ children }: PropsWithChildren) {
     <div className="app-shell">
       <header className="app-header">
         <div>
-          <h1 className="app-title">모둠 수학 RPG</h1>
+          <h1 className="app-title">곱셈 나눗셈 수학 RPG</h1>
           <p className="app-subtitle">숲 마을에서 즐기는 곱셈 나눗셈 모험</p>
         </div>
         <nav className="nav-links">

@@ -9,121 +9,224 @@ const LEVEL_TO_LESSON: Record<number, number> = {
   6: 7,
 };
 
+function toComma(value: number) {
+  return value.toLocaleString("ko-KR");
+}
+
+function makeObjectiveChoices(answer: number) {
+  const a = answer;
+  const b = Math.max(1, answer + 10);
+  const c = Math.max(1, answer - 10);
+  const d = Math.max(1, Math.floor(answer / 10));
+  return [toComma(a), toComma(b), toComma(c), toComma(d)];
+}
+
+function buildLevel1(): BattleQuestion[] {
+  const out: BattleQuestion[] = [];
+  for (let i = 1; i <= 100; i += 1) {
+    const n = 120 + (i % 80);
+    const tens = 20 + (i % 7) * 10;
+    const answer = n * tens;
+    if (i % 2 === 0) {
+      out.push({
+        id: `L1-O${i}`,
+        level: 1,
+        lesson: 2,
+        type: "objective",
+        prompt: `${n} × ${tens}의 값을 고르세요.`,
+        choices: makeObjectiveChoices(answer),
+        answer: toComma(answer),
+        explanation: `(세 자리 수)×(몇십) 계산입니다.`,
+      });
+    } else {
+      out.push({
+        id: `L1-S${i}`,
+        level: 1,
+        lesson: 2,
+        type: "subjective",
+        prompt: `${n} × ${tens} = ? (숫자만 입력)`,
+        answer: String(answer),
+        explanation: `(세 자리 수)×(몇십) 계산입니다.`,
+      });
+    }
+  }
+  return out;
+}
+
+function buildLevel2(): BattleQuestion[] {
+  const out: BattleQuestion[] = [];
+  for (let i = 1; i <= 100; i += 1) {
+    const n = 200 + (i % 120);
+    const m = 11 + (i % 19);
+    const answer = n * m;
+    if (i % 2 === 0) {
+      out.push({
+        id: `L2-O${i}`,
+        level: 2,
+        lesson: 3,
+        type: "objective",
+        prompt: `${n} × ${m} 계산으로 알맞은 값을 고르세요.`,
+        choices: makeObjectiveChoices(answer),
+        answer: toComma(answer),
+        explanation: `(세 자리 수)×(몇십몇) 계산입니다.`,
+      });
+    } else {
+      out.push({
+        id: `L2-S${i}`,
+        level: 2,
+        lesson: 3,
+        type: "subjective",
+        prompt: `${n} × ${m} = ? (숫자만 입력)`,
+        answer: String(answer),
+        explanation: `(세 자리 수)×(몇십몇) 계산입니다.`,
+      });
+    }
+  }
+  return out;
+}
+
+function buildLevel3(): BattleQuestion[] {
+  const out: BattleQuestion[] = [];
+  for (let i = 1; i <= 100; i += 1) {
+    const divisor = 20 + (i % 8) * 10;
+    const q = 4 + (i % 13);
+    const dividend = divisor * q;
+    if (i % 2 === 0) {
+      out.push({
+        id: `L3-O${i}`,
+        level: 3,
+        lesson: 4,
+        type: "objective",
+        prompt: `${dividend} ÷ ${divisor}의 몫은?`,
+        choices: [String(q), String(q + 1), String(Math.max(1, q - 1)), String(q + 2)],
+        answer: String(q),
+        explanation: `(세 자리 수)÷(몇십) 계산입니다.`,
+      });
+    } else {
+      out.push({
+        id: `L3-S${i}`,
+        level: 3,
+        lesson: 4,
+        type: "subjective",
+        prompt: `${dividend} ÷ ${divisor} = ? (숫자만 입력)`,
+        answer: String(q),
+        explanation: `(세 자리 수)÷(몇십) 계산입니다.`,
+      });
+    }
+  }
+  return out;
+}
+
+function buildLevel4(): BattleQuestion[] {
+  const out: BattleQuestion[] = [];
+  for (let i = 1; i <= 100; i += 1) {
+    const divisor = 12 + (i % 18);
+    const q = 2 + (i % 8);
+    const dividend = divisor * q;
+    if (i % 2 === 0) {
+      out.push({
+        id: `L4-O${i}`,
+        level: 4,
+        lesson: 5,
+        type: "objective",
+        prompt: `${dividend} ÷ ${divisor}의 몫은?`,
+        choices: [String(q), String(q + 1), String(Math.max(1, q - 1)), String(q + 2)],
+        answer: String(q),
+        explanation: `몫이 한 자리 수인 (두/세 자리 수)÷(두 자리 수)입니다.`,
+      });
+    } else {
+      out.push({
+        id: `L4-S${i}`,
+        level: 4,
+        lesson: 5,
+        type: "subjective",
+        prompt: `${dividend} ÷ ${divisor} = ? (숫자만 입력)`,
+        answer: String(q),
+        explanation: `몫이 한 자리 수인 나눗셈입니다.`,
+      });
+    }
+  }
+  return out;
+}
+
+function buildLevel5(): BattleQuestion[] {
+  const out: BattleQuestion[] = [];
+  for (let i = 1; i <= 100; i += 1) {
+    const divisor = 21 + (i % 17);
+    const q = 10 + (i % 20);
+    const dividend = divisor * q;
+    if (i % 2 === 0) {
+      out.push({
+        id: `L5-O${i}`,
+        level: 5,
+        lesson: 6,
+        type: "objective",
+        prompt: `${dividend} ÷ ${divisor}의 몫을 고르세요.`,
+        choices: [String(q), String(q + 1), String(q - 1), String(q + 2)],
+        answer: String(q),
+        explanation: `몫이 두 자리 수이고 나누어떨어지는 경우입니다.`,
+      });
+    } else {
+      out.push({
+        id: `L5-S${i}`,
+        level: 5,
+        lesson: 6,
+        type: "subjective",
+        prompt: `${dividend} ÷ ${divisor} = ? (숫자만 입력)`,
+        answer: String(q),
+        explanation: `몫이 두 자리 수이고 나누어떨어지는 나눗셈입니다.`,
+      });
+    }
+  }
+  return out;
+}
+
+function buildLevel6(): BattleQuestion[] {
+  const out: BattleQuestion[] = [];
+  for (let i = 1; i <= 100; i += 1) {
+    const divisor = 25 + (i % 19);
+    const q = 10 + (i % 18);
+    const r = 1 + (i % Math.max(2, divisor - 1));
+    const dividend = divisor * q + r;
+    if (i % 2 === 0) {
+      const correct = `${q} ... ${r}`;
+      out.push({
+        id: `L6-O${i}`,
+        level: 6,
+        lesson: 7,
+        type: "objective",
+        prompt: `${dividend} ÷ ${divisor}의 계산 결과(몫 ... 나머지)는?`,
+        choices: [
+          correct,
+          `${q + 1} ... ${r}`,
+          `${q} ... ${Math.max(0, r - 1)}`,
+          `${q - 1} ... ${r + 1}`,
+        ],
+        answer: correct,
+        explanation: `몫이 두 자리 수이고 나머지가 있는 나눗셈입니다.`,
+      });
+    } else {
+      out.push({
+        id: `L6-S${i}`,
+        level: 6,
+        lesson: 7,
+        type: "subjective",
+        prompt: `${dividend} ÷ ${divisor}의 몫만 입력하세요.`,
+        answer: String(q),
+        explanation: `몫과 나머지 중 몫만 묻는 문제입니다.`,
+      });
+    }
+  }
+  return out;
+}
+
 const QUESTIONS: BattleQuestion[] = [
-  {
-    id: "L1-O1",
-    level: 1,
-    lesson: 2,
-    type: "objective",
-    prompt: "123 × 20의 값을 고르세요.",
-    choices: ["246", "2,460", "24,600", "1,230"],
-    answer: "2,460",
-    explanation: "123×2=246, 여기에 10배를 해서 2,460입니다.",
-  },
-  {
-    id: "L1-S1",
-    level: 1,
-    lesson: 2,
-    type: "subjective",
-    prompt: "340 × 30 = ? (숫자만 입력)",
-    answer: "10200",
-    explanation: "34×3=102, 뒤에 0 두 개를 붙이면 10,200입니다.",
-  },
-  {
-    id: "L2-O1",
-    level: 2,
-    lesson: 3,
-    type: "objective",
-    prompt: "213 × 18 계산으로 알맞은 것은?",
-    choices: ["3,834", "2,034", "4,824", "3,294"],
-    answer: "3,834",
-    explanation: "213×(10+8)=2,130+1,704=3,834입니다.",
-  },
-  {
-    id: "L2-S1",
-    level: 2,
-    lesson: 3,
-    type: "subjective",
-    prompt: "456 × 12 = ? (숫자만 입력)",
-    answer: "5472",
-    explanation: "456×10=4,560, 456×2=912, 합하면 5,472입니다.",
-  },
-  {
-    id: "L3-O1",
-    level: 3,
-    lesson: 4,
-    type: "objective",
-    prompt: "160 ÷ 20의 몫은?",
-    choices: ["8", "80", "18", "6"],
-    answer: "8",
-    explanation: "160을 20씩 묶으면 8묶음입니다.",
-  },
-  {
-    id: "L3-S1",
-    level: 3,
-    lesson: 4,
-    type: "subjective",
-    prompt: "350 ÷ 50 = ? (숫자만 입력)",
-    answer: "7",
-    explanation: "35÷5와 같은 관계로 7입니다.",
-  },
-  {
-    id: "L4-O1",
-    level: 4,
-    lesson: 5,
-    type: "objective",
-    prompt: "96 ÷ 24의 몫은?",
-    choices: ["3", "4", "5", "6"],
-    answer: "4",
-    explanation: "24×4=96 이므로 몫은 4입니다.",
-  },
-  {
-    id: "L4-S1",
-    level: 4,
-    lesson: 5,
-    type: "subjective",
-    prompt: "84 ÷ 21 = ? (숫자만 입력)",
-    answer: "4",
-    explanation: "21×4=84이므로 몫은 4입니다.",
-  },
-  {
-    id: "L5-O1",
-    level: 5,
-    lesson: 6,
-    type: "objective",
-    prompt: "736 ÷ 32의 몫은?",
-    choices: ["22", "23", "24", "25"],
-    answer: "23",
-    explanation: "32×23=736, 나누어떨어집니다.",
-  },
-  {
-    id: "L5-S1",
-    level: 5,
-    lesson: 6,
-    type: "subjective",
-    prompt: "624 ÷ 24 = ? (숫자만 입력)",
-    answer: "26",
-    explanation: "24×26=624입니다.",
-  },
-  {
-    id: "L6-O1",
-    level: 6,
-    lesson: 7,
-    type: "objective",
-    prompt: "950 ÷ 45의 계산 결과로 알맞은 것은?",
-    choices: ["21 ... 5", "20 ... 50", "22 ... 10", "19 ... 95"],
-    answer: "21 ... 5",
-    explanation: "45×21=945, 나머지 5입니다.",
-  },
-  {
-    id: "L6-S1",
-    level: 6,
-    lesson: 7,
-    type: "subjective",
-    prompt: "437 ÷ 21의 몫만 입력하세요.",
-    answer: "20",
-    explanation: "21×20=420, 21×21=441(초과)라서 몫은 20입니다.",
-  },
+  ...buildLevel1(),
+  ...buildLevel2(),
+  ...buildLevel3(),
+  ...buildLevel4(),
+  ...buildLevel5(),
+  ...buildLevel6(),
 ];
 
 export function getLessonByLevel(level: number) {
