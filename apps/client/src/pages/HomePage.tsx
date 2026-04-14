@@ -5,13 +5,18 @@ export default function HomePage() {
     <section className="page-card">
       <h2>숲 마을 입장</h2>
       <p>
-        귀여운 동물 친구들과 함께 모험하며 곱셈과 나눗셈 문제를 풀어보세요.
-        학생 화면에서는 모둠 입장과 전투를, 관리자 화면에서는 반 활동 관제를
-        확인할 수 있습니다.
+        캐릭터를 고르고 숲 마을을 돌아다니다 몬스터를 만나면 문제 전투가 시작됩니다.
+        정답을 맞히면 아이템과 외형 업그레이드를 얻을 수 있어요.
       </p>
-      <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
-        <Link to="/student">학생 화면 보기</Link>
-        <Link to="/admin">관리자 화면 보기</Link>
+      <div className="character-preview-row">
+        <div className="character-preview">🐶</div>
+        <div className="character-preview">🐱</div>
+        <div className="character-preview">🐰</div>
+        <div className="character-preview">🦊</div>
+      </div>
+      <div style={{ display: "flex", gap: 8, marginTop: 14, flexWrap: "wrap" }}>
+        <Link to="/student">게임 시작하기</Link>
+        <Link to="/admin">관리자 화면</Link>
       </div>
     </section>
   );

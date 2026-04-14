@@ -24,7 +24,6 @@ export default function AppShell({ children }: PropsWithChildren) {
         </div>
         <nav className="nav-links">
           <NavItem to="/" label="홈" />
-          <NavItem to="/student" label="학생 화면" />
           <NavItem to="/admin" label="관리자 화면" />
         </nav>
       </header>

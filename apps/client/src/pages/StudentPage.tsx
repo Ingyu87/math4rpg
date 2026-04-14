@@ -2,8 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ACHIEVEMENT_COLORS, getAchievementByLevel } from "../config/achievement";
 import CuteToast from "../components/ui/CuteToast";
 import NpcBubble from "../components/ui/NpcBubble";
-import type { GroupId } from "../types/game";
-import type { BattleQuestion } from "../types/game";
+import type { BattleQuestion, GroupId } from "../types/game";
 import {
   getStudentState,
   joinGroup,
@@ -33,6 +32,13 @@ const ITEM_POOL = [
   "토끼 귀 장식",
 ];
 
+const CHARACTER_OPTIONS = [
+  { id: "dog", name: "멍멍이", emoji: "🐶" },
+  { id: "cat", name: "고양이", emoji: "🐱" },
+  { id: "rabbit", name: "토끼", emoji: "🐰" },
+  { id: "fox", name: "여우", emoji: "🦊" },
+];
+
 function formatDuration(seconds: number) {
   const mins = Math.floor(seconds / 60);
   const secs = seconds % 60;
@@ -41,6 +47,13 @@ function formatDuration(seconds: number) {
 
 function randomItem() {
   return ITEM_POOL[Math.floor(Math.random() * ITEM_POOL.length)];
+}
+
+function randomMonsterPosition() {
+  return {
+    x: 60 + Math.floor(Math.random() * 520),
+    y: 70 + Math.floor(Math.random() * 220),
+  };
 }
 
 export default function StudentPage() {
@@ -52,6 +65,9 @@ export default function StudentPage() {
   );
   const [classCode, setClassCode] = useState<string>(
     localStorage.getItem("math4rpg_class_code") ?? "",
+  );
+  const [selectedCharacterId, setSelectedCharacterId] = useState<string>(
+    localStorage.getItem("math4rpg_character") ?? "",
   );
   const [counts, setCounts] = useState<Record<number, number>>({
     1: 0,
@@ -85,6 +101,9 @@ export default function StudentPage() {
     Array<{ id: string; message: string; tone: "success" | "info" | "warning" }>
   >([]);
 
+  const [playerPos, setPlayerPos] = useState({ x: 80, y: 120 });
+  const [monsterPos, setMonsterPos] = useState(randomMonsterPosition());
+
   const sessionUserId = useMemo(() => {
     const key = "math4rpg_user_id";
     const found = localStorage.getItem(key);
@@ -94,6 +113,11 @@ export default function StudentPage() {
     return generated;
   }, []);
   const sessionStartedAt = useMemo(() => Date.now(), []);
+
+  const selectedCharacter = useMemo(
+    () => CHARACTER_OPTIONS.find((c) => c.id === selectedCharacterId),
+    [selectedCharacterId],
+  );
 
   const pushToast = (message: string, tone: "success" | "info" | "warning" = "info") => {
     const id = crypto.randomUUID();
@@ -120,10 +144,49 @@ export default function StudentPage() {
     };
   }, [joinedGroup, sessionUserId, nickname]);
 
+  useEffect(() => {
+    if (!joinedGroup || currentQuestion || isCleared) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      const step = 16;
+      setPlayerPos((prev) => {
+        let x = prev.x;
+        let y = prev.y;
+        if (event.key === "ArrowUp" || event.key.toLowerCase() === "w") y -= step;
+        if (event.key === "ArrowDown" || event.key.toLowerCase() === "s") y += step;
+        if (event.key === "ArrowLeft" || event.key.toLowerCase() === "a") x -= step;
+        if (event.key === "ArrowRight" || event.key.toLowerCase() === "d") x += step;
+        return {
+          x: Math.max(20, Math.min(600, x)),
+          y: Math.max(20, Math.min(300, y)),
+        };
+      });
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [joinedGroup, currentQuestion, isCleared]);
+
+  useEffect(() => {
+    if (!joinedGroup || currentQuestion || isCleared) return;
+    const dx = playerPos.x - monsterPos.x;
+    const dy = playerPos.y - monsterPos.y;
+    const collided = Math.sqrt(dx * dx + dy * dy) < 34;
+    if (collided) {
+      const question = pickRandomQuestion(playerLevel);
+      setCurrentQuestion(question);
+      setBattleFeedback("");
+      setSubjectiveAnswer("");
+      pushToast("몬스터를 만났어요! 문제에 도전하세요.", "info");
+    }
+  }, [joinedGroup, playerPos, monsterPos, currentQuestion, playerLevel, isCleared]);
+
   const handleJoin = async () => {
     const trimmed = nickname.trim();
     if (!trimmed) {
       setMessage("닉네임을 먼저 입력해 주세요.");
+      return;
+    }
+    if (!selectedCharacterId) {
+      setMessage("캐릭터를 먼저 선택해 주세요.");
       return;
     }
     const code = classCode.trim();
@@ -139,6 +202,7 @@ export default function StudentPage() {
       }
       localStorage.setItem("math4rpg_nickname", trimmed);
       localStorage.setItem("math4rpg_class_code", code);
+      localStorage.setItem("math4rpg_character", selectedCharacterId);
       await joinGroup(selectedGroup, sessionUserId, trimmed, code);
       const persisted = await getStudentState(sessionUserId);
       if (persisted) {
@@ -152,6 +216,7 @@ export default function StudentPage() {
         setEarnedItems(persisted.earnedItems ?? []);
       }
       setJoinedGroup(selectedGroup);
+      setMonsterPos(randomMonsterPosition());
       setMessage(`${selectedGroup}모둠 입장 완료`);
       pushToast(`${selectedGroup}모둠에 입장했어요!`, "success");
     } catch (error) {
@@ -167,13 +232,6 @@ export default function StudentPage() {
     setJoinedGroup(null);
     setMessage(`${joinedGroup}모둠에서 퇴장했습니다.`);
     pushToast("모둠에서 나왔어요.", "info");
-  };
-
-  const handleStartBattle = () => {
-    const question = pickRandomQuestion(playerLevel);
-    setCurrentQuestion(question);
-    setSubjectiveAnswer("");
-    setBattleFeedback("");
   };
 
   const handleAnswer = (submitted: string) => {
@@ -204,6 +262,7 @@ export default function StudentPage() {
         `정답! 몬스터 처치 성공 (+${newItem}) / ${currentQuestion.explanation}`,
       );
       pushToast(`정답! ${newItem} 획득`, "success");
+      setMonsterPos(randomMonsterPosition());
       if (joinedGroup) {
         void logBattleEvent({
           type: "BATTLE_CORRECT",
@@ -347,16 +406,30 @@ export default function StudentPage() {
   return (
     <>
       <section className="page-card">
-        <h2>학생 게임 화면 (초기 MVP)</h2>
-        <p>현재 캐릭터: {nickname.trim() || "닉네임 미설정"}</p>
+        <h2>캐릭터 선택</h2>
+        <div className="character-select-grid">
+          {CHARACTER_OPTIONS.map((character) => (
+            <button
+              key={character.id}
+              type="button"
+              className={`character-card ${selectedCharacterId === character.id ? "selected" : ""}`}
+              onClick={() => setSelectedCharacterId(character.id)}
+            >
+              <div className="character-emoji">{character.emoji}</div>
+              <div>{character.name}</div>
+            </button>
+          ))}
+        </div>
+      </section>
+
+      <section className="page-card">
+        <h2>숲 마을 입장 준비</h2>
+        <p>현재 캐릭터: {selectedCharacter ? `${selectedCharacter.emoji} ${selectedCharacter.name}` : "미선택"}</p>
         <p>모둠: {joinedGroup ? `${joinedGroup}모둠` : "미참가"}</p>
         <p>레벨: {playerLevel} (차시 {lesson})</p>
         <p>
           성취수준:
-          <span
-            className="badge"
-            style={{ backgroundColor: ACHIEVEMENT_COLORS[achievement] }}
-          >
+          <span className="badge" style={{ backgroundColor: ACHIEVEMENT_COLORS[achievement] }}>
             {achievement}
           </span>
         </p>
@@ -365,9 +438,7 @@ export default function StudentPage() {
         <p>레벨 성취율: {progressPercent}% ({levelCorrectCount}/15)</p>
         <p>최근 정답률: {recentAccuracy}%</p>
         <p>캐릭터 외형 단계: {appearanceTier}단계</p>
-        <p>
-          보유 아이템: {earnedItems.length === 0 ? "없음" : earnedItems.join(", ")}
-        </p>
+        <p>보유 아이템: {earnedItems.length === 0 ? "없음" : earnedItems.join(", ")}</p>
         <hr style={{ border: "1px solid #efe7ff", margin: "14px 0" }} />
         <h3>모둠 입장 (RTDB)</h3>
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
@@ -380,9 +451,7 @@ export default function StudentPage() {
           />
           <input
             value={classCode}
-            onChange={(e) =>
-              setClassCode(e.target.value.replace(/\D/g, "").slice(0, 5))
-            }
+            onChange={(e) => setClassCode(e.target.value.replace(/\D/g, "").slice(0, 5))}
             placeholder="반코드 5자리"
             style={{ padding: "8px 10px", borderRadius: 10, width: 140 }}
             disabled={Boolean(joinedGroup)}
@@ -405,69 +474,66 @@ export default function StudentPage() {
           <button type="button" onClick={handleLeave} disabled={!joinedGroup}>
             퇴장
           </button>
-          <strong>
-            현재 상태: {joinedGroup ? `${joinedGroup}모둠 참가중` : "미참가"}
-          </strong>
+          <strong>현재 상태: {joinedGroup ? `${joinedGroup}모둠 참가중` : "미참가"}</strong>
         </div>
         {message && <p style={{ marginTop: 8 }}>{message}</p>}
       </section>
+
       <section className="page-card">
-        <h3>문제 전투</h3>
+        <h3>숲 마을 탐험</h3>
         <NpcBubble speaker="콩돌">
-          준비된 문제를 맞히면 아이템을 받고, 오답 3회면 레벨이 내려가요!
+          방향키(또는 WASD)로 이동해서 몬스터를 만나면 문제 전투가 시작돼요!
         </NpcBubble>
-        {isCleared ? (
-          <p>축하합니다! 만렙 달성으로 게임이 종료되었습니다.</p>
-        ) : (
-          <>
-            {!currentQuestion ? (
-              <button
-                type="button"
-                onClick={handleStartBattle}
-                disabled={!joinedGroup}
-              >
-                몬스터 만나기 (문제 시작)
-              </button>
+        <div className="game-world">
+          <div className="game-grass" />
+          {selectedCharacter && (
+            <div
+              className="player-sprite"
+              style={{ left: `${playerPos.x}px`, top: `${playerPos.y}px` }}
+            >
+              {selectedCharacter.emoji}
+            </div>
+          )}
+          <div
+            className="monster-sprite"
+            style={{ left: `${monsterPos.x}px`, top: `${monsterPos.y}px` }}
+          >
+            👾
+          </div>
+        </div>
+        {currentQuestion && (
+          <div className="battle-dialog">
+            <p>
+              [{currentQuestion.type === "objective" ? "객관식" : "주관식"}]{" "}
+              {currentQuestion.prompt}
+            </p>
+            {currentQuestion.type === "objective" ? (
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                {(currentQuestion.choices ?? []).map((choice) => (
+                  <button key={choice} type="button" onClick={() => handleAnswer(choice)}>
+                    {choice}
+                  </button>
+                ))}
+              </div>
             ) : (
-              <div>
-                <p>
-                  [{currentQuestion.type === "objective" ? "객관식" : "주관식"}]{" "}
-                  {currentQuestion.prompt}
-                </p>
-                {currentQuestion.type === "objective" ? (
-                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                    {(currentQuestion.choices ?? []).map((choice) => (
-                      <button
-                        key={choice}
-                        type="button"
-                        onClick={() => handleAnswer(choice)}
-                      >
-                        {choice}
-                      </button>
-                    ))}
-                  </div>
-                ) : (
-                  <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                    <input
-                      value={subjectiveAnswer}
-                      onChange={(e) => setSubjectiveAnswer(e.target.value)}
-                      placeholder="정답 입력"
-                      style={{ padding: "8px 10px", borderRadius: 10 }}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => handleAnswer(subjectiveAnswer)}
-                    >
-                      제출
-                    </button>
-                  </div>
-                )}
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <input
+                  value={subjectiveAnswer}
+                  onChange={(e) => setSubjectiveAnswer(e.target.value)}
+                  placeholder="정답 입력"
+                  style={{ padding: "8px 10px", borderRadius: 10 }}
+                />
+                <button type="button" onClick={() => handleAnswer(subjectiveAnswer)}>
+                  제출
+                </button>
               </div>
             )}
-          </>
+          </div>
         )}
+        {isCleared ? <p>축하합니다! 만렙 달성으로 게임이 종료되었습니다.</p> : null}
         {battleFeedback && <p style={{ marginTop: 10 }}>{battleFeedback}</p>}
       </section>
+
       <section className="page-card">
         <h3>활동 요약 리포트</h3>
         <p>총 활동 시간: {formatDuration(elapsedSec)}</p>
@@ -496,6 +562,7 @@ export default function StudentPage() {
           </tbody>
         </table>
       </section>
+
       {isCleared && (
         <section className="page-card">
           <h3>만렙 종료 리포트</h3>
@@ -503,17 +570,14 @@ export default function StudentPage() {
             최종 레벨: <strong>6 (확장)</strong>
           </p>
           <p>
-            총 풀이 {totalAttempts}문항 / 정답 {totalCorrect}문항 / 오답 {totalWrong}
-            문항
+            총 풀이 {totalAttempts}문항 / 정답 {totalCorrect}문항 / 오답 {totalWrong}문항
           </p>
           <p>총 플레이 시간: {formatDuration(elapsedSec)}</p>
           <p>최종 캐릭터 외형 단계: {appearanceTier}단계</p>
-          <p>
-            획득 아이템/장신구:{" "}
-            {earnedItems.length === 0 ? "없음" : earnedItems.join(", ")}
-          </p>
+          <p>획득 아이템/장신구: {earnedItems.length === 0 ? "없음" : earnedItems.join(", ")}</p>
         </section>
       )}
+
       <div className="toast-stack">
         {toasts.map((toast) => (
           <CuteToast key={toast.id} message={toast.message} tone={toast.tone} />
