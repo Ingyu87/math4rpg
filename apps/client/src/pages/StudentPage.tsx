@@ -1110,28 +1110,30 @@ export default function StudentPage() {
         </div>
         <p className="forest-ac-tagline">수학과 함께하는 작은 마을이에요</p>
 
-        <div className="forest-ac-villager-row" role="group" aria-label="캐릭터 선택">
-          {CHARACTER_OPTIONS.map((character, idx) => (
-            <button
-              key={character.id}
-              type="button"
-              className={`ac-villager-tile ${AC_VILLAGER_TILE_MOD[idx % AC_VILLAGER_TILE_MOD.length]} ${
-                selectedCharacterId === character.id ? "ac-villager-tile--picked" : ""
-              }`}
-              onClick={() => setSelectedCharacterId(character.id)}
-              aria-pressed={selectedCharacterId === character.id}
-            >
-              <span
-                className="ac-villager-tile__portrait"
-                style={{
-                  backgroundImage: `url(${character.sprite})`,
-                  backgroundPosition: `0px ${-FACING_ROW.down * ENTITY_SIZE}px`,
-                }}
-              />
-              <span className="ac-villager-tile__name">{character.name}</span>
-            </button>
-          ))}
-        </div>
+        {!joinedGroup ? (
+          <div className="forest-ac-villager-row" role="group" aria-label="캐릭터 선택">
+            {CHARACTER_OPTIONS.map((character, idx) => (
+              <button
+                key={character.id}
+                type="button"
+                className={`ac-villager-tile ${AC_VILLAGER_TILE_MOD[idx % AC_VILLAGER_TILE_MOD.length]} ${
+                  selectedCharacterId === character.id ? "ac-villager-tile--picked" : ""
+                }`}
+                onClick={() => setSelectedCharacterId(character.id)}
+                aria-pressed={selectedCharacterId === character.id}
+              >
+                <span
+                  className="ac-villager-tile__portrait"
+                  style={{
+                    backgroundImage: `url(${character.sprite})`,
+                    backgroundPosition: `0px ${-FACING_ROW.down * ENTITY_SIZE}px`,
+                  }}
+                />
+                <span className="ac-villager-tile__name">{character.name}</span>
+              </button>
+            ))}
+          </div>
+        ) : null}
 
         <motion.div
           className="item-warehouse"
