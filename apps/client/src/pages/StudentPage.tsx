@@ -1,4 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { onValue, ref as dbRef } from "firebase/database";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { realtimeDb } from "../config/firebase";
 import { ACHIEVEMENT_COLORS, getAchievementByLevel } from "../config/achievement";
 import CuteToast from "../components/ui/CuteToast";
 import NpcBubble from "../components/ui/NpcBubble";
@@ -48,6 +50,11 @@ const ITEM_POOL = [
   "무지개 안경",
   "토끼 귀 장식",
 ];
+
+/** 아이템 창고에 표시할 칸 수 (텍스트 타일만, 스프라이트 없음) */
+const ITEM_WAREHOUSE_SLOTS = 16;
+
+const AC_VILLAGER_TILE_MOD = ["ac-villager-tile--a", "ac-villager-tile--b", "ac-villager-tile--c", "ac-villager-tile--d"] as const;
 
 const WORLD_WIDTH = 640;
 const WORLD_HEIGHT = 320;
@@ -121,6 +128,22 @@ function randomMonsterPosition(playerPos?: { x: number; y: number }) {
   return { x: WORLD_WIDTH - 52, y: WORLD_HEIGHT - 52 };
 }
 
+/** 몬스터 배회: 느린 속도의 단위 방향 벡터 */
+function randomMonsterVelocity() {
+  const a = Math.random() * Math.PI * 2;
+  const speed = 0.55 + Math.random() * 0.28;
+  return { vx: Math.cos(a) * speed, vy: Math.sin(a) * speed };
+}
+
+function clampMonsterVelocity(v: { vx: number; vy: number }) {
+  const len = Math.hypot(v.vx, v.vy) || 1;
+  const target = 0.72;
+  return { vx: (v.vx / len) * target, vy: (v.vy / len) * target };
+}
+
+const MONSTER_WANDER_MS = 340;
+const MONSTER_WANDER_STEP = 2.1;
+
 export default function StudentPage() {
   const [selectedGroup, setSelectedGroup] = useState<GroupId>(1);
   const [joinedGroup, setJoinedGroup] = useState<GroupId | null>(null);
@@ -181,6 +204,9 @@ export default function StudentPage() {
   });
   const [rankingTab, setRankingTab] = useState(1);
   const [groupMembers, setGroupMembers] = useState<GroupMemberSummary[]>([]);
+  const joinedGroupRef = useRef<GroupId | null>(null);
+  const playfieldRef = useRef<HTMLDivElement | null>(null);
+  const monsterVelRef = useRef(randomMonsterVelocity());
 
   const sessionUserId = useMemo(() => {
     const key = "math4rpg_user_id";
@@ -197,13 +223,16 @@ export default function StudentPage() {
     [selectedCharacterId],
   );
 
-  const pushToast = (message: string, tone: "success" | "info" | "warning" = "info") => {
-    const id = crypto.randomUUID();
-    setToasts((prev) => [...prev, { id, message, tone }]);
-    window.setTimeout(() => {
-      setToasts((prev) => prev.filter((toast) => toast.id !== id));
-    }, 2500);
-  };
+  const pushToast = useCallback(
+    (message: string, tone: "success" | "info" | "warning" = "info") => {
+      const id = crypto.randomUUID();
+      setToasts((prev) => [...prev, { id, message, tone }]);
+      window.setTimeout(() => {
+        setToasts((prev) => prev.filter((toast) => toast.id !== id));
+      }, 2500);
+    },
+    [],
+  );
 
   useEffect(() => subscribeGroupCounts(setCounts), []);
 
@@ -235,6 +264,10 @@ export default function StudentPage() {
   }, [sessionStartedAt]);
 
   useEffect(() => {
+    joinedGroupRef.current = joinedGroup;
+  }, [joinedGroup]);
+
+  useEffect(() => {
     return () => {
       if (joinedGroup) {
         void leaveGroup(joinedGroup, sessionUserId, nickname || "학생");
@@ -243,32 +276,51 @@ export default function StudentPage() {
   }, [joinedGroup, sessionUserId, nickname]);
 
   useEffect(() => {
-    if (!joinedGroup || currentQuestion || isCleared) return;
-    const onKeyDown = (event: KeyboardEvent) => {
+    const r = dbRef(realtimeDb, `students/${sessionUserId}`);
+    return onValue(r, (snap) => {
+      if (!snap.exists()) return;
+      const gid = snap.val()?.groupId;
+      if (joinedGroupRef.current != null && (gid === null || gid === undefined)) {
+        setJoinedGroup(null);
+        setMessage("교사에 의해 모둠에서 제외되었습니다.");
+        pushToast("모둠에서 나왔어요.", "warning");
+      }
+    });
+  }, [sessionUserId, pushToast]);
+
+  const tryMove = useCallback(
+    (event: KeyboardEvent) => {
+      if (!joinedGroupRef.current || currentQuestion || isCleared) return;
       const step = 12;
       let dx = 0;
       let dy = 0;
-      let nextFacing: Facing = playerFacing;
-      const key = event.key.toLowerCase();
-      if (key === "arrowup" || key === "w") {
-        dy = -step;
-        nextFacing = "up";
+      let nextFacing: Facing = "down";
+      switch (event.code) {
+        case "ArrowUp":
+        case "KeyW":
+          dy = -step;
+          nextFacing = "up";
+          break;
+        case "ArrowDown":
+        case "KeyS":
+          dy = step;
+          nextFacing = "down";
+          break;
+        case "ArrowLeft":
+        case "KeyA":
+          dx = -step;
+          nextFacing = "left";
+          break;
+        case "ArrowRight":
+        case "KeyD":
+          dx = step;
+          nextFacing = "right";
+          break;
+        default:
+          return;
       }
-      if (key === "arrowdown" || key === "s") {
-        dy = step;
-        nextFacing = "down";
-      }
-      if (key === "arrowleft" || key === "a") {
-        dx = -step;
-        nextFacing = "left";
-      }
-      if (key === "arrowright" || key === "d") {
-        dx = step;
-        nextFacing = "right";
-      }
-      if (dx === 0 && dy === 0) return;
       event.preventDefault();
-      setPlayerFacing(nextFacing);
+      event.stopPropagation();
       setPlayerPos((prev) => {
         const x = Math.max(
           ENTITY_SIZE / 2,
@@ -285,27 +337,101 @@ export default function StudentPage() {
           height: ENTITY_SIZE,
         };
         if (intersectsAnyObstacle(hitbox)) return prev;
-        setWalkFrame((frame) => (frame + 1) % 3);
+        queueMicrotask(() => {
+          setPlayerFacing(nextFacing);
+          setWalkFrame((f) => (f + 1) % 3);
+        });
         return { x, y };
       });
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [joinedGroup, currentQuestion, isCleared]);
+    },
+    [currentQuestion, isCleared],
+  );
 
   useEffect(() => {
     if (!joinedGroup || currentQuestion || isCleared) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      tryMove(e);
+    };
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+  }, [joinedGroup, currentQuestion, isCleared, tryMove]);
+
+  useEffect(() => {
+    if (!joinedGroup || currentQuestion) return;
+    const t = window.setTimeout(() => playfieldRef.current?.focus({ preventScroll: true }), 200);
+    return () => window.clearTimeout(t);
+  }, [joinedGroup, currentQuestion]);
+
+  useEffect(() => {
+    if (currentQuestion || isCleared) return;
     const timer = window.setInterval(() => {
       setMonsterFrame((frame) => (frame + 1) % 3);
     }, 220);
     return () => window.clearInterval(timer);
-  }, [joinedGroup, currentQuestion, isCleared]);
+  }, [currentQuestion, isCleared]);
+
+  useEffect(() => {
+    if (currentQuestion || isCleared) return;
+    const id = window.setInterval(() => {
+      setMonsterPos((prev) => {
+        let { vx, vy } = monsterVelRef.current;
+        if (Math.random() < 0.12) {
+          const turn = (Math.random() - 0.5) * 0.9;
+          const cos = Math.cos(turn);
+          const sin = Math.sin(turn);
+          const rx = vx * cos - vy * sin;
+          const ry = vx * sin + vy * cos;
+          const nv = clampMonsterVelocity({ vx: rx, vy: ry });
+          vx = nv.vx;
+          vy = nv.vy;
+          monsterVelRef.current = { vx, vy };
+        }
+        const v = monsterVelRef.current;
+        const rawX = prev.x + v.vx * MONSTER_WANDER_STEP;
+        const rawY = prev.y + v.vy * MONSTER_WANDER_STEP;
+        const half = ENTITY_SIZE / 2;
+        let nx = rawX;
+        let ny = rawY;
+        if (rawX < half) {
+          nx = half;
+          monsterVelRef.current.vx = Math.abs(v.vx) * 0.85 + 0.08;
+          monsterVelRef.current.vy += (Math.random() - 0.5) * 0.2;
+        } else if (rawX > WORLD_WIDTH - half) {
+          nx = WORLD_WIDTH - half;
+          monsterVelRef.current.vx = -Math.abs(v.vx) * 0.85 - 0.08;
+          monsterVelRef.current.vy += (Math.random() - 0.5) * 0.2;
+        }
+        if (rawY < half) {
+          ny = half;
+          monsterVelRef.current.vy = Math.abs(monsterVelRef.current.vy) * 0.85 + 0.08;
+          monsterVelRef.current.vx += (Math.random() - 0.5) * 0.2;
+        } else if (rawY > WORLD_HEIGHT - half) {
+          ny = WORLD_HEIGHT - half;
+          monsterVelRef.current.vy = -Math.abs(monsterVelRef.current.vy) * 0.85 - 0.08;
+          monsterVelRef.current.vx += (Math.random() - 0.5) * 0.2;
+        }
+        monsterVelRef.current = clampMonsterVelocity(monsterVelRef.current);
+        const hitbox = {
+          x: nx - half,
+          y: ny - half,
+          width: ENTITY_SIZE,
+          height: ENTITY_SIZE,
+        };
+        if (intersectsAnyObstacle(hitbox)) {
+          monsterVelRef.current = randomMonsterVelocity();
+          return prev;
+        }
+        return { x: nx, y: ny };
+      });
+    }, MONSTER_WANDER_MS);
+    return () => window.clearInterval(id);
+  }, [currentQuestion, isCleared]);
 
   useEffect(() => {
     if (!joinedGroup || currentQuestion || isCleared) return;
     const dx = playerPos.x - monsterPos.x;
     const dy = playerPos.y - monsterPos.y;
-    const collided = Math.sqrt(dx * dx + dy * dy) < 28;
+    const collided = Math.sqrt(dx * dx + dy * dy) < 38;
     if (collided) {
       const question = pickRandomQuestion(playerLevel);
       setCurrentQuestion(question);
@@ -315,7 +441,7 @@ export default function StudentPage() {
     }
   }, [joinedGroup, playerPos, monsterPos, currentQuestion, playerLevel, isCleared]);
 
-  const handleJoin = async () => {
+  const handleJoin = useCallback(async () => {
     const trimmed = nickname.trim();
     if (!trimmed) {
       setMessage("닉네임을 먼저 입력해 주세요.");
@@ -352,6 +478,7 @@ export default function StudentPage() {
         setEarnedItems(persisted.earnedItems ?? []);
       }
       setJoinedGroup(selectedGroup);
+      monsterVelRef.current = randomMonsterVelocity();
       setMonsterPos(randomMonsterPosition(playerPos));
       setMessage(`${selectedGroup}모둠 입장 완료`);
       pushToast(`${selectedGroup}모둠에 입장했어요!`, "success");
@@ -360,7 +487,15 @@ export default function StudentPage() {
       setMessage(text);
       pushToast(text, "warning");
     }
-  };
+  }, [
+    nickname,
+    selectedCharacterId,
+    classCode,
+    selectedGroup,
+    sessionUserId,
+    playerPos,
+    pushToast,
+  ]);
 
   const handleLeave = async () => {
     if (!joinedGroup) return;
@@ -398,6 +533,7 @@ export default function StudentPage() {
         `정답! 몬스터 처치 성공 (+${newItem}) / ${currentQuestion.explanation}`,
       );
       pushToast(`정답! ${newItem} 획득`, "success");
+      monsterVelRef.current = randomMonsterVelocity();
       setMonsterPos(randomMonsterPosition(playerPos));
       if (joinedGroup) {
         void logBattleEvent({
@@ -559,6 +695,14 @@ export default function StudentPage() {
   const partySize = displayMembers.length;
   const isPartySplit = Boolean(joinedGroup && partySize >= 2);
 
+  const canAttemptJoin = useMemo(
+    () =>
+      nickname.trim().length > 0 &&
+      Boolean(selectedCharacterId) &&
+      isValidClassCode(classCode.trim()),
+    [nickname, selectedCharacterId, classCode],
+  );
+
   const forestScene = (
     <>
       <div className="game-tiles" />
@@ -607,88 +751,237 @@ export default function StudentPage() {
 
   return (
     <>
-      <section className="page-card">
-        <h2>캐릭터 선택</h2>
-        <div className="character-select-grid">
-          {CHARACTER_OPTIONS.map((character) => (
+      <section className="page-card forest-hub-card">
+        <div className="forest-ac-title" aria-hidden>
+          <span className="forest-ac-title__tile forest-ac-title__tile--pink">숲</span>
+          <span className="forest-ac-title__tile forest-ac-title__tile--blue">마</span>
+          <span className="forest-ac-title__tile forest-ac-title__tile--mint">을</span>
+        </div>
+        <p className="forest-ac-tagline">수학과 함께하는 작은 마을이에요</p>
+
+        <div className="forest-ac-villager-row" role="group" aria-label="캐릭터 선택">
+          {CHARACTER_OPTIONS.map((character, idx) => (
             <button
               key={character.id}
               type="button"
-              className={`character-card ${selectedCharacterId === character.id ? "selected" : ""}`}
+              className={`ac-villager-tile ${AC_VILLAGER_TILE_MOD[idx % AC_VILLAGER_TILE_MOD.length]} ${
+                selectedCharacterId === character.id ? "ac-villager-tile--picked" : ""
+              }`}
               onClick={() => setSelectedCharacterId(character.id)}
+              aria-pressed={selectedCharacterId === character.id}
             >
-              <div
-                className="character-portrait"
+              <span
+                className="ac-villager-tile__portrait"
                 style={{
                   backgroundImage: `url(${character.sprite})`,
                   backgroundPosition: `0px ${-FACING_ROW.down * ENTITY_SIZE}px`,
                 }}
               />
-              <div>{character.name}</div>
+              <span className="ac-villager-tile__name">{character.name}</span>
             </button>
           ))}
         </div>
-      </section>
 
-      <section className="page-card">
-        <h2>숲 마을 입장 준비</h2>
-        <p>현재 캐릭터: {selectedCharacter ? selectedCharacter.name : "미선택"}</p>
-        <p>모둠: {joinedGroup ? `${joinedGroup}모둠` : "미참가"}</p>
-        <p>레벨: {playerLevel} (차시 {lesson})</p>
-        <p>
-          성취수준:
-          <span className="badge" style={{ backgroundColor: ACHIEVEMENT_COLORS[achievement] }}>
-            {achievement}
-          </span>
-        </p>
-        <p>HP: {hp}</p>
-        <p>오답 누적: {wrongStreak}/3</p>
-        <p>레벨 성취율: {progressPercent}% ({levelCorrectCount}/15)</p>
-        <p>최근 정답률: {recentAccuracy}%</p>
-        <p>캐릭터 외형 단계: {appearanceTier}단계</p>
-        <p>보유 아이템: {earnedItems.length === 0 ? "없음" : earnedItems.join(", ")}</p>
-        <hr style={{ border: "1px solid #efe7ff", margin: "14px 0" }} />
-        <h3>모둠 입장 (RTDB)</h3>
-        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-          <input
-            value={nickname}
-            onChange={(e) => setNickname(e.target.value)}
-            placeholder="학생 닉네임"
-            style={{ padding: "8px 10px", borderRadius: 10, minWidth: 180 }}
-            disabled={Boolean(joinedGroup)}
-          />
-          <input
-            value={classCode}
-            onChange={(e) => setClassCode(e.target.value.replace(/\D/g, "").slice(0, 5))}
-            placeholder="반코드 5자리"
-            style={{ padding: "8px 10px", borderRadius: 10, width: 140 }}
-            disabled={Boolean(joinedGroup)}
-          />
-          <select
-            value={selectedGroup}
-            onChange={(e) => setSelectedGroup(Number(e.target.value) as GroupId)}
-            style={{ padding: "8px 10px", borderRadius: 10 }}
-            disabled={Boolean(joinedGroup)}
-          >
-            <option value={1}>1모둠 ({counts[1]}/5)</option>
-            <option value={2}>2모둠 ({counts[2]}/5)</option>
-            <option value={3}>3모둠 ({counts[3]}/5)</option>
-            <option value={4}>4모둠 ({counts[4]}/5)</option>
-            <option value={5}>5모둠 ({counts[5]}/5)</option>
-          </select>
-          <button type="button" onClick={handleJoin} disabled={Boolean(joinedGroup)}>
-            입장
-          </button>
-          <button type="button" onClick={handleLeave} disabled={!joinedGroup}>
-            퇴장
-          </button>
-          <strong>현재 상태: {joinedGroup ? `${joinedGroup}모둠 참가중` : "미참가"}</strong>
+        <div className="item-warehouse" aria-label="아이템 창고">
+          <div className="item-warehouse__head">
+            <span className="item-warehouse__icon" aria-hidden>
+              📦
+            </span>
+            아이템 창고
+          </div>
+          <p className="item-warehouse__note">획득한 장비는 여기 칸에만 표시돼요. 캐릭터 스프라이트 위에는 얹지 않아요.</p>
+          <div className="item-warehouse__grid">
+            {Array.from({ length: ITEM_WAREHOUSE_SLOTS }, (_, i) => {
+              const label = earnedItems[i];
+              return (
+                <div
+                  key={`wh-${i}`}
+                  className={`item-warehouse-slot${label ? " item-warehouse-slot--filled" : ""}`}
+                >
+                  {label ? (
+                    <span className="item-warehouse-slot__text">{label}</span>
+                  ) : (
+                    <span className="item-warehouse-slot__empty">빈 칸</span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          {earnedItems.length > ITEM_WAREHOUSE_SLOTS ? (
+            <p className="item-warehouse__more">+{earnedItems.length - ITEM_WAREHOUSE_SLOTS}개 더 있어요</p>
+          ) : null}
         </div>
-        {message && <p style={{ marginTop: 8 }}>{message}</p>}
+
+        {!joinedGroup ? (
+          <div className="forest-gate-form">
+            <label className="forest-gate-field">
+              <span className="forest-gate-label">닉네임</span>
+              <input
+                className="forest-gate-input"
+                value={nickname}
+                onChange={(e) => setNickname(e.target.value)}
+                placeholder="이름을 적어 주세요"
+                autoComplete="nickname"
+              />
+            </label>
+            <label className="forest-gate-field">
+              <span className="forest-gate-label">반코드</span>
+              <input
+                className="forest-gate-input forest-gate-input--code"
+                value={classCode}
+                onChange={(e) => setClassCode(e.target.value.replace(/\D/g, "").slice(0, 5))}
+                placeholder="5자리"
+                inputMode="numeric"
+              />
+            </label>
+            <label className="forest-gate-field forest-gate-field--select">
+              <span className="forest-gate-label">모둠</span>
+              <select
+                className="forest-gate-select"
+                value={selectedGroup}
+                onChange={(e) => setSelectedGroup(Number(e.target.value) as GroupId)}
+              >
+                <option value={1}>1모둠 ({counts[1]}/5)</option>
+                <option value={2}>2모둠 ({counts[2]}/5)</option>
+                <option value={3}>3모둠 ({counts[3]}/5)</option>
+                <option value={4}>4모둠 ({counts[4]}/5)</option>
+                <option value={5}>5모둠 ({counts[5]}/5)</option>
+              </select>
+            </label>
+          </div>
+        ) : (
+          <div className="forest-hub-status">
+            <p className="forest-hub-status__line">
+              <strong>{selectedCharacter?.name ?? "—"}</strong> · {joinedGroup}모둠 참가 중 · Lv{playerLevel}{" "}
+              (차시 {lesson}) · HP {hp}
+            </p>
+            <button type="button" className="forest-hub-leave-btn" onClick={() => void handleLeave()}>
+              모둠에서 나가기
+            </button>
+          </div>
+        )}
+
+        <details className="forest-prep-details">
+          <summary>상세 상태 보기</summary>
+          <div className="forest-prep-detail-grid">
+            <p>
+              성취수준:{" "}
+              <span className="badge" style={{ backgroundColor: ACHIEVEMENT_COLORS[achievement] }}>
+                {achievement}
+              </span>
+            </p>
+            <p>오답 누적: {wrongStreak}/3</p>
+            <p>
+              레벨 성취율: {progressPercent}% ({levelCorrectCount}/15)
+            </p>
+            <p>최근 정답률: {recentAccuracy}%</p>
+            <p>캐릭터 외형 단계: {appearanceTier}단계</p>
+          </div>
+        </details>
+        {message ? <p className="forest-prep-msg">{message}</p> : null}
+        {!joinedGroup ? (
+          <p className="forest-ac-hint">아래 숲 미리보기 화면 맨 아래에서 <strong>Enter</strong>로도 입장할 수 있어요.</p>
+        ) : null}
       </section>
 
       <section className="page-card">
-        <div className="game-section-wrap">
+        <div
+          className={`game-section-wrap${joinedGroup ? " game-section-wrap--with-ranking" : ""}`}
+        >
+          <div className="game-section-main">
+            <h3>숲 마을 탐험</h3>
+            <details className="game-help-details">
+              <summary>조작 안내</summary>
+              <NpcBubble speaker="콩돌">
+                캐릭터는 위·아래·좌·우 4방향으로 걷고, 모둠은 최대 5칸까지 화면을 나눠 보여요. 혼자면 숲이 크게
+                펼쳐지고, 친구가 들어올 때마다 시트가 늘어나요. 방향키(또는 WASD)로 이동해 몬스터를 만나면 전투가
+                시작돼요! (플레이 영역을 한 번 누른 뒤 이동해 보세요.)
+              </NpcBubble>
+            </details>
+            {!joinedGroup ? (
+              <div className="game-preview-shell">
+                <div
+                  ref={playfieldRef}
+                  tabIndex={0}
+                  role="application"
+                  aria-label="숲 마을 미리보기"
+                  className="game-world game-world--preview"
+                  onPointerDown={(e) => {
+                    (e.currentTarget as HTMLDivElement).focus({ preventScroll: true });
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key !== "Enter") return;
+                    e.preventDefault();
+                    void handleJoin();
+                  }}
+                >
+                  {forestScene}
+                </div>
+                <div className="ac-enter-dock">
+                  <button
+                    type="button"
+                    className="ac-enter-btn"
+                    onClick={() => void handleJoin()}
+                    disabled={!canAttemptJoin}
+                  >
+                    <span className="ac-enter-btn__key" aria-hidden>
+                      ⏎
+                    </span>
+                    <span className="ac-enter-btn__label">를 눌러 숲으로 입장</span>
+                  </button>
+                  <p className="ac-enter-sub">닉네임·반코드·캐릭터를 준비한 뒤 눌러 주세요</p>
+                </div>
+              </div>
+            ) : (
+            <div
+              className={`party-layout ${
+                isPartySplit
+                  ? `party-layout--split party-layout--n${Math.min(partySize, 5)}`
+                  : "party-layout--solo"
+              }`}
+            >
+              {displayMembers.map((m) => (
+                <div
+                  key={m.userId}
+                  className={`party-slot ${m.userId === sessionUserId ? "party-slot--me" : ""}`}
+                >
+                  <div className="party-slot-head">
+                    <span className="party-slot-badge">{m.userId === sessionUserId ? "나" : "친구"}</span>
+                    <span className="party-slot-name">{m.userName}</span>
+                  </div>
+                  {m.userId === sessionUserId ? (
+                    <div
+                      className={
+                        isPartySplit ? "party-game-scale" : "party-game-scale party-game-scale--solo"
+                      }
+                    >
+                      <div
+                        ref={playfieldRef}
+                        tabIndex={0}
+                        role="application"
+                        aria-label="숲 마을 플레이 영역"
+                        className={`game-world ${isPartySplit ? "game-world--party-slot" : "game-world--solo"}`}
+                        onPointerDown={(e) => {
+                          (e.currentTarget as HTMLDivElement).focus({ preventScroll: true });
+                        }}
+                      >
+                        {forestScene}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="party-peer-placeholder">
+                      <span className="party-peer-leaf" aria-hidden>
+                        🌿
+                      </span>
+                      <p className="party-peer-title">{m.userName}</p>
+                      <p className="party-peer-note">같은 모둠 · 이 기기에서는 내 숲만 조작해요</p>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+          </div>
           {joinedGroup ? (
             <aside className="live-ranking-panel" aria-label="실시간 레벨별 랭킹">
               <div className="live-ranking-head">실시간 랭킹</div>
@@ -730,54 +1023,6 @@ export default function StudentPage() {
               </ol>
             </aside>
           ) : null}
-          <h3>숲 마을 탐험</h3>
-          <NpcBubble speaker="콩돌">
-            캐릭터는 위·아래·좌·우 4방향으로 걷고, 모둠은 최대 5칸까지 화면을 나눠 보여요. 혼자면 숲이 크게 펼쳐지고, 친구가 들어올 때마다 시트가 늘어나요. 방향키(또는 WASD)로 이동해 몬스터를 만나면 전투가 시작돼요!
-          </NpcBubble>
-          {!joinedGroup ? (
-            <div className="game-world game-world--preview">{forestScene}</div>
-          ) : (
-            <div
-              className={`party-layout ${
-                isPartySplit
-                  ? `party-layout--split party-layout--n${Math.min(partySize, 5)}`
-                  : "party-layout--solo"
-              }`}
-            >
-              {displayMembers.map((m) => (
-                <div
-                  key={m.userId}
-                  className={`party-slot ${m.userId === sessionUserId ? "party-slot--me" : ""}`}
-                >
-                  <div className="party-slot-head">
-                    <span className="party-slot-badge">{m.userId === sessionUserId ? "나" : "친구"}</span>
-                    <span className="party-slot-name">{m.userName}</span>
-                  </div>
-                  {m.userId === sessionUserId ? (
-                    <div
-                      className={
-                        isPartySplit ? "party-game-scale" : "party-game-scale party-game-scale--solo"
-                      }
-                    >
-                      <div
-                        className={`game-world ${isPartySplit ? "game-world--party-slot" : "game-world--solo"}`}
-                      >
-                        {forestScene}
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="party-peer-placeholder">
-                      <span className="party-peer-leaf" aria-hidden>
-                        🌿
-                      </span>
-                      <p className="party-peer-title">{m.userName}</p>
-                      <p className="party-peer-note">같은 모둠 · 이 기기에서는 내 숲만 조작해요</p>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
         </div>
         {currentQuestion && (
           <div className="battle-dialog">

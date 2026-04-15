@@ -237,3 +237,25 @@ export async function logBattleEvent(input: {
     extra: input.extra,
   });
 }
+
+/** 교사가 같은 반 학생을 모둠에서 제외할 때 (학생 클라이언트는 RTDB 구독으로 동기화) */
+export async function adminRemoveStudentFromGroup(
+  teacherClassCode: string,
+  studentUserId: string,
+): Promise<void> {
+  const snapshot = await get(ref(realtimeDb, `students/${studentUserId}`));
+  if (!snapshot.exists()) {
+    throw new Error("학생 정보를 찾을 수 없습니다.");
+  }
+  const v = snapshot.val() as Record<string, unknown>;
+  if (String(v?.classCode ?? "") !== teacherClassCode) {
+    throw new Error("이 반 학생만 조정할 수 있습니다.");
+  }
+  const rawGid = v?.groupId;
+  if (rawGid === null || rawGid === undefined || rawGid === "") {
+    throw new Error("모둠에 없는 학생입니다.");
+  }
+  const groupId = Number(rawGid) as GroupId;
+  const userName = String(v?.name ?? "학생");
+  await leaveGroup(groupId, studentUserId, userName);
+}
