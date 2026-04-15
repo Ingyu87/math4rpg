@@ -134,6 +134,8 @@ const AC_VILLAGER_TILE_MOD = ["ac-villager-tile--a", "ac-villager-tile--b", "ac-
 const WORLD_WIDTH = 640;
 const WORLD_HEIGHT = 320;
 const ENTITY_SIZE = 32;
+const COLLISION_ENTITY_SIZE = 26;
+const OBSTACLE_COLLISION_INSET = 6;
 
 const MAP_OBSTACLES: Rect[] = [
   { x: 160, y: 70, width: 80, height: 42 },
@@ -185,7 +187,24 @@ function intersectsRect(entity: Rect, obstacle: Rect) {
 }
 
 function intersectsAnyObstacle(entity: Rect) {
-  return MAP_OBSTACLES.some((obstacle) => intersectsRect(entity, obstacle));
+  return MAP_OBSTACLES.some((obstacle) =>
+    intersectsRect(entity, {
+      x: obstacle.x + OBSTACLE_COLLISION_INSET,
+      y: obstacle.y + OBSTACLE_COLLISION_INSET,
+      width: Math.max(8, obstacle.width - OBSTACLE_COLLISION_INSET * 2),
+      height: Math.max(8, obstacle.height - OBSTACLE_COLLISION_INSET * 2),
+    }),
+  );
+}
+
+function entityCollisionBox(center: { x: number; y: number }, size = COLLISION_ENTITY_SIZE): Rect {
+  const half = size / 2;
+  return {
+    x: center.x - half,
+    y: center.y - half,
+    width: size,
+    height: size,
+  };
 }
 
 function randomMonsterPosition(
@@ -197,12 +216,7 @@ function randomMonsterPosition(
       x: 24 + Math.floor(Math.random() * (WORLD_WIDTH - 48)),
       y: 24 + Math.floor(Math.random() * (WORLD_HEIGHT - 48)),
     };
-    const hitbox = {
-      x: candidate.x - ENTITY_SIZE / 2,
-      y: candidate.y - ENTITY_SIZE / 2,
-      width: ENTITY_SIZE,
-      height: ENTITY_SIZE,
-    };
+    const hitbox = entityCollisionBox(candidate);
     const tooCloseToPlayer =
       playerPos != null &&
       Math.hypot(candidate.x - playerPos.x, candidate.y - playerPos.y) < 88;
@@ -558,12 +572,7 @@ export default function StudentPage() {
           ENTITY_SIZE / 2,
           Math.min(WORLD_HEIGHT - ENTITY_SIZE / 2, prev.y + dy),
         );
-        const hitbox = {
-          x: x - ENTITY_SIZE / 2,
-          y: y - ENTITY_SIZE / 2,
-          width: ENTITY_SIZE,
-          height: ENTITY_SIZE,
-        };
+        const hitbox = entityCollisionBox({ x, y });
         if (intersectsAnyObstacle(hitbox)) return prev;
         queueMicrotask(() => {
           setPlayerFacing(nextFacing);
@@ -652,12 +661,7 @@ export default function StudentPage() {
             };
           }
           monsterVelRef.current[m.id] = clampMonsterVelocity(monsterVelRef.current[m.id] ?? vel);
-          const hitbox = {
-            x: nx - half,
-            y: ny - half,
-            width: ENTITY_SIZE,
-            height: ENTITY_SIZE,
-          };
+          const hitbox = entityCollisionBox({ x: nx, y: ny });
           if (intersectsAnyObstacle(hitbox)) {
             monsterVelRef.current[m.id] = randomMonsterVelocity();
             return m;
@@ -1550,7 +1554,15 @@ export default function StudentPage() {
           </div>
         ) : null}
         {isCleared ? <p>축하합니다! 만렙 달성으로 게임이 종료되었습니다.</p> : null}
-        {battleFeedback && <p style={{ marginTop: 10 }}>{battleFeedback}</p>}
+        {battleFeedback ? (
+          <p
+            className={`battle-feedback${
+              battleFeedback.startsWith("오답") ? " battle-feedback--wrong" : " battle-feedback--correct"
+            }`}
+          >
+            {battleFeedback}
+          </p>
+        ) : null}
           </section>
         </div>
       </div>

@@ -1450,6 +1450,32 @@ select {
   flex: 1 1 220px;
 }
 
+.battle-feedback {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 2px solid transparent;
+  font-weight: 800;
+  line-height: 1.45;
+  letter-spacing: -0.01em;
+  background: #fff;
+  opacity: 1;
+}
+
+.battle-feedback--correct {
+  color: #184c1f;
+  border-color: #9ad38f;
+  background: #f3ffee;
+  box-shadow: 0 2px 0 #c6e9bf;
+}
+
+.battle-feedback--wrong {
+  color: #7a1d12;
+  border-color: #efb19f;
+  background: #fff1eb;
+  box-shadow: 0 2px 0 #f3cfc2;
+}
+
 @keyframes cloud-float {
   from {
     transform: translateX(-14%) scale(var(--cloud-scale));
