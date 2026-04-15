@@ -267,6 +267,12 @@ export async function syncStudentBattleState(input: {
   appearanceTier: number;
   earnedItems: string[];
 }) {
+  // 관리자가 모둠/학생을 삭제한 뒤에는 학생 상태를 다시 생성하지 않도록 가드
+  const memberSnapshot = await get(memberRef(realtimeDb, input.groupId, input.userId));
+  if (!memberSnapshot.exists()) return;
+  const memberClassCode = String((memberSnapshot.val() as { classCode?: string })?.classCode ?? "");
+  if (memberClassCode && memberClassCode !== input.classCode) return;
+
   await update(ref(realtimeDb, `students/${input.userId}`), {
     userId: input.userId,
     name: input.userName,

@@ -1184,6 +1184,58 @@ export default function StudentPage() {
                 시작돼요! (플레이 영역을 한 번 누른 뒤 이동해 보세요.)
               </NpcBubble>
             </details>
+            {currentQuestion && (
+              <div className="battle-dialog">
+                <p className="battle-achievement">
+                  학습 목표{" "}
+                  <strong>
+                    {STUDENT_ACHIEVEMENT_LABEL[currentQuestion.achievementStandard] ??
+                      "현재 문제의 학습 목표를 확인해요"}
+                  </strong>
+                  {currentQuestion.questionKind && currentQuestion.questionKind !== "computation"
+                    ? ` · ${
+                        currentQuestion.questionKind === "estimate"
+                          ? "어림"
+                          : currentQuestion.questionKind === "principle"
+                            ? "원리"
+                            : ""
+                      }`
+                    : null}
+                </p>
+                {currentQuestion.situation ? (
+                  <p className="battle-situation">{currentQuestion.situation}</p>
+                ) : null}
+                <p>
+                  [{currentQuestion.type === "objective" ? "객관식" : "주관식"}]{" "}
+                  {currentQuestion.prompt}
+                </p>
+                {currentQuestion.type === "objective" ? (
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    {(currentQuestion.choices ?? []).map((choice) => (
+                      <button key={choice} type="button" onClick={() => handleAnswer(choice)}>
+                        {choice}
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                    <input
+                      value={subjectiveAnswer}
+                      onChange={(e) => setSubjectiveAnswer(e.target.value)}
+                      placeholder={
+                        currentQuestion.level === 6
+                          ? "예: 12 ... 3 (몫 ... 나머지)"
+                          : "정답 입력"
+                      }
+                      style={{ padding: "8px 10px", borderRadius: 10 }}
+                    />
+                    <button type="button" onClick={() => handleAnswer(subjectiveAnswer)}>
+                      제출
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
             {!joinedGroup ? (
               <div className="game-preview-shell">
                 <div
@@ -1315,58 +1367,6 @@ export default function StudentPage() {
                 </ol>
               </aside>
             ) : null}
-        {currentQuestion && (
-          <div className="battle-dialog">
-            <p className="battle-achievement">
-              학습 목표{" "}
-              <strong>
-                {STUDENT_ACHIEVEMENT_LABEL[currentQuestion.achievementStandard] ??
-                  "현재 문제의 학습 목표를 확인해요"}
-              </strong>
-              {currentQuestion.questionKind && currentQuestion.questionKind !== "computation"
-                ? ` · ${
-                    currentQuestion.questionKind === "estimate"
-                      ? "어림"
-                      : currentQuestion.questionKind === "principle"
-                        ? "원리"
-                        : ""
-                  }`
-                : null}
-            </p>
-            {currentQuestion.situation ? (
-              <p className="battle-situation">{currentQuestion.situation}</p>
-            ) : null}
-            <p>
-              [{currentQuestion.type === "objective" ? "객관식" : "주관식"}]{" "}
-              {currentQuestion.prompt}
-            </p>
-            {currentQuestion.type === "objective" ? (
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                {(currentQuestion.choices ?? []).map((choice) => (
-                  <button key={choice} type="button" onClick={() => handleAnswer(choice)}>
-                    {choice}
-                  </button>
-                ))}
-              </div>
-            ) : (
-              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                <input
-                  value={subjectiveAnswer}
-                  onChange={(e) => setSubjectiveAnswer(e.target.value)}
-                  placeholder={
-                    currentQuestion.level === 6
-                      ? "예: 12 ... 3 (몫 ... 나머지)"
-                      : "정답 입력"
-                  }
-                  style={{ padding: "8px 10px", borderRadius: 10 }}
-                />
-                <button type="button" onClick={() => handleAnswer(subjectiveAnswer)}>
-                  제출
-                </button>
-              </div>
-            )}
-          </div>
-        )}
         {isCleared ? <p>축하합니다! 만렙 달성으로 게임이 종료되었습니다.</p> : null}
         {battleFeedback && <p style={{ marginTop: 10 }}>{battleFeedback}</p>}
           </section>
