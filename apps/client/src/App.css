@@ -168,7 +168,7 @@
 
 .student-game-card--with-ranking {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 408px;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 340px);
   gap: 14px;
   align-items: start;
 }
@@ -200,14 +200,14 @@
   position: sticky;
   top: 8px;
   align-self: start;
-  min-height: 540px;
+  min-height: 0;
   max-height: min(92dvh, calc(100dvh - 120px));
   overflow-y: auto;
 }
 
 @media (max-width: 960px) {
   .student-game-card--with-ranking {
-    grid-template-columns: minmax(0, 1fr) 320px;
+    grid-template-columns: minmax(0, 1fr) 280px;
   }
 }
 
@@ -308,11 +308,18 @@
 }
 
 .student-page-layout .live-ranking-panel {
-  font-size: 15px;
-  padding: 14px 14px;
+  font-size: 13px;
+  padding: 10px 10px;
   background: rgb(255 255 255 / 68%);
   border: 1px solid rgb(255 255 255 / 42%);
   backdrop-filter: blur(10px);
+}
+
+.student-page-layout .game-help-details--in-ranking {
+  margin-top: 10px;
+  margin-bottom: 0;
+  border-top: 1px solid #dbe8c1;
+  padding-top: 8px;
 }
 
 .student-page-layout .live-ranking-fixed-scope {
@@ -1386,6 +1393,13 @@ select {
   border-radius: 14px;
   border: 1px solid #e0ccff;
   background: #fffaf0;
+}
+
+.battle-dialog--in-ranking {
+  margin: 0 0 10px;
+  padding: 10px;
+  border-color: #d8d0f8;
+  box-shadow: 0 1px 0 rgb(0 0 0 / 6%);
 }
 
 @keyframes cloud-float {

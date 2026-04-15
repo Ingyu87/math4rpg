@@ -395,7 +395,6 @@ export default function AdminPage() {
               <th>성취수준</th>
               <th>성취율</th>
               <th>최근 정답률</th>
-              <th>오답누적</th>
               <th>외형단계</th>
               <th>아이템수</th>
               <th>아이템</th>
@@ -430,7 +429,6 @@ export default function AdminPage() {
                 </td>
                 <td>{student.levelProgress}%</td>
                 <td>{student.recentAccuracy}%</td>
-                <td>{student.wrongStreak}/3</td>
                 <td>{student.appearanceTier}단계</td>
                 <td>{student.earnedItems.length}개</td>
                 <td>{student.earnedItems.length === 0 ? "-" : student.earnedItems.join(", ")}</td>

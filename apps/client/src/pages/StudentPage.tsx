@@ -1173,7 +1173,6 @@ export default function StudentPage() {
                 {achievement}
               </span>
             </p>
-            <p>오답 누적: {wrongStreak}/3</p>
             <p>
               레벨 성취율: {progressPercent}% ({levelCorrectCount}/15)
             </p>
@@ -1302,65 +1301,6 @@ export default function StudentPage() {
         <div className="game-section-wrap">
           <div className="game-section-main">
             <h3>숲 마을 탐험</h3>
-            <details className="game-help-details">
-              <summary>조작 안내</summary>
-              <NpcBubble speaker="콩돌">
-                캐릭터는 위·아래·좌·우 4방향으로 걷고, 방향키(또는 WASD)로 이동해 몬스터를 만나면 전투가
-                시작돼요! (플레이 영역을 한 번 누른 뒤 이동해 보세요.)
-              </NpcBubble>
-            </details>
-            {currentQuestion && (
-              <div className="battle-dialog">
-                <p className="battle-achievement">
-                  학습 목표{" "}
-                  <strong>
-                    {STUDENT_ACHIEVEMENT_LABEL[currentQuestion.achievementStandard] ??
-                      "현재 문제의 학습 목표를 확인해요"}
-                  </strong>
-                  {currentQuestion.questionKind && currentQuestion.questionKind !== "computation"
-                    ? ` · ${
-                        currentQuestion.questionKind === "estimate"
-                          ? "어림"
-                          : currentQuestion.questionKind === "principle"
-                            ? "원리"
-                            : ""
-                      }`
-                    : null}
-                </p>
-                {currentQuestion.situation ? (
-                  <p className="battle-situation">{currentQuestion.situation}</p>
-                ) : null}
-                <p>
-                  [{currentQuestion.type === "objective" ? "객관식" : "주관식"}]{" "}
-                  {currentQuestion.prompt}
-                </p>
-                {currentQuestion.type === "objective" ? (
-                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                    {(currentQuestion.choices ?? []).map((choice) => (
-                      <button key={choice} type="button" onClick={() => handleAnswer(choice)}>
-                        {choice}
-                      </button>
-                    ))}
-                  </div>
-                ) : (
-                  <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                    <input
-                      value={subjectiveAnswer}
-                      onChange={(e) => setSubjectiveAnswer(e.target.value)}
-                      placeholder={
-                        currentQuestion.level === 6
-                          ? "예: 12 ... 3 (몫 ... 나머지)"
-                          : "정답 입력"
-                      }
-                      style={{ padding: "8px 10px", borderRadius: 10 }}
-                    />
-                    <button type="button" onClick={() => handleAnswer(subjectiveAnswer)}>
-                      제출
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
             {!joinedGroup ? (
               <div className="game-preview-shell">
                 <div
@@ -1473,6 +1413,58 @@ export default function StudentPage() {
                     </button>
                   ))}
                 </div>
+                {currentQuestion ? (
+                  <div className="battle-dialog battle-dialog--in-ranking">
+                    <p className="battle-achievement">
+                      학습 목표{" "}
+                      <strong>
+                        {STUDENT_ACHIEVEMENT_LABEL[currentQuestion.achievementStandard] ??
+                          "현재 문제의 학습 목표를 확인해요"}
+                      </strong>
+                      {currentQuestion.questionKind && currentQuestion.questionKind !== "computation"
+                        ? ` · ${
+                            currentQuestion.questionKind === "estimate"
+                              ? "어림"
+                              : currentQuestion.questionKind === "principle"
+                                ? "원리"
+                                : ""
+                          }`
+                        : null}
+                    </p>
+                    {currentQuestion.situation ? (
+                      <p className="battle-situation">{currentQuestion.situation}</p>
+                    ) : null}
+                    <p>
+                      [{currentQuestion.type === "objective" ? "객관식" : "주관식"}]{" "}
+                      {currentQuestion.prompt}
+                    </p>
+                    {currentQuestion.type === "objective" ? (
+                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                        {(currentQuestion.choices ?? []).map((choice) => (
+                          <button key={choice} type="button" onClick={() => handleAnswer(choice)}>
+                            {choice}
+                          </button>
+                        ))}
+                      </div>
+                    ) : (
+                      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                        <input
+                          value={subjectiveAnswer}
+                          onChange={(e) => setSubjectiveAnswer(e.target.value)}
+                          placeholder={
+                            currentQuestion.level === 6
+                              ? "예: 12 ... 3 (몫 ... 나머지)"
+                              : "정답 입력"
+                          }
+                          style={{ padding: "8px 10px", borderRadius: 10 }}
+                        />
+                        <button type="button" onClick={() => handleAnswer(subjectiveAnswer)}>
+                          제출
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ) : null}
                 <ol className="live-ranking-list live-ranking-list--dock-wide">
                   {rankingRows.length === 0 ? (
                     <li className="live-ranking-empty">이 레벨에 아직 순위가 없어요.</li>
@@ -1493,6 +1485,13 @@ export default function StudentPage() {
                     ))
                   )}
                 </ol>
+                <details className="game-help-details game-help-details--in-ranking">
+                  <summary>조작 안내</summary>
+                  <NpcBubble speaker="콩돌">
+                    캐릭터는 위·아래·좌·우 4방향으로 걷고, 방향키(또는 WASD)로 이동해 몬스터를 만나면
+                    전투가 시작돼요! (플레이 영역을 한 번 누른 뒤 이동해 보세요.)
+                  </NpcBubble>
+                </details>
               </motion.aside>
             ) : null}
         {isCleared ? <p>축하합니다! 만렙 달성으로 게임이 종료되었습니다.</p> : null}
