@@ -173,9 +173,12 @@
   overflow: hidden;
 }
 
-.student-page-layout .game-section-wrap--with-ranking {
-  grid-template-columns: minmax(0, 1fr) minmax(112px, 140px);
-  gap: 8px;
+/* 실시간 랭킹: 게임 아래(카드 하단)에 붙임 */
+.student-page-layout .student-game-card--with-ranking .live-ranking-panel--dock {
+  width: 100%;
+  flex-shrink: 0;
+  margin-top: 4px;
+  box-sizing: border-box;
 }
 
 .student-page-layout .forest-hub-card {
@@ -575,6 +578,95 @@ select {
   font-weight: 800;
   color: #35531e;
   margin: 0 0 2px;
+}
+
+.live-ranking-scopes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 0 0 6px;
+}
+
+.live-ranking-scopes button {
+  padding: 4px 7px;
+  font-size: 10px;
+  font-weight: 700;
+  border-radius: 8px;
+  border: 1px solid #c8dcb0;
+  background: rgb(255 255 255 / 55%);
+  color: #4a5c32;
+  cursor: pointer;
+}
+
+.live-ranking-scopes button.active {
+  background: linear-gradient(180deg, #d4f0a8 0%, #b8dc7a 100%);
+  border-color: #9bc45e;
+  color: #2d4018;
+}
+
+.live-ranking-panel--by-groups {
+  max-height: min(52dvh, 420px);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.live-ranking-panel--dock.live-ranking-panel--by-groups {
+  max-height: none;
+}
+
+.live-ranking-by-groups {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-right: 2px;
+}
+
+.live-ranking-panel--dock .live-ranking-by-groups {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(128px, 1fr));
+  gap: 8px;
+  max-height: min(28dvh, 220px);
+  overflow-y: auto;
+}
+
+@media (min-width: 900px) {
+  .live-ranking-panel--dock .live-ranking-by-groups {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+}
+
+.live-ranking-list--dock-wide li {
+  grid-template-columns: 22px minmax(0, 1fr) 44px minmax(56px, 1fr);
+}
+
+.live-ranking-mini {
+  border: 1px solid #dce8c8;
+  border-radius: 10px;
+  padding: 6px 8px;
+  background: rgb(255 255 255 / 45%);
+}
+
+.live-ranking-mini__title {
+  margin: 0 0 4px;
+  font-size: 11px;
+  font-weight: 800;
+  color: #35531e;
+}
+
+.live-ranking-mini__empty {
+  margin: 0;
+  font-size: 10px;
+  color: #8a9678;
+}
+
+.live-ranking-list--compact li {
+  grid-template-columns: 16px 1fr 30px 16px;
+  font-size: 10px;
+  padding: 2px 0;
 }
 
 .live-ranking-sub {

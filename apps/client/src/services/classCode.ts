@@ -131,9 +131,48 @@ function emptyLevelRankings(): Record<number, LevelRankingEntry[]> {
   return { 1: [], 2: [], 3: [], 4: [], 5: [], 6: [] };
 }
 
+function emptyPerGroupByLevel(): Record<number, Record<GroupId, LevelRankingEntry[]>> {
+  const out: Record<number, Record<GroupId, LevelRankingEntry[]>> = {};
+  for (let lv = 1; lv <= 6; lv += 1) {
+    out[lv] = { 1: [], 2: [], 3: [], 4: [], 5: [] };
+  }
+  return out;
+}
+
+/** 반 전체 상위 + 레벨별 모둠(1~5) 내부 상위 */
+export type LiveRankingsBundle = {
+  classByLevel: Record<number, LevelRankingEntry[]>;
+  perGroupByLevel: Record<number, Record<GroupId, LevelRankingEntry[]>>;
+};
+
+export function emptyLiveRankingsBundle(): LiveRankingsBundle {
+  return {
+    classByLevel: emptyLevelRankings(),
+    perGroupByLevel: emptyPerGroupByLevel(),
+  };
+}
+
+function sortRankingEntries(
+  entries: LevelRankingEntry[],
+  raw: Record<string, unknown>,
+): LevelRankingEntry[] {
+  return [...entries]
+    .map((entry) => ({
+      entry,
+      t: Number((raw[entry.userId] as { updatedAt?: number })?.updatedAt ?? 0),
+    }))
+    .sort((a, b) => {
+      if (b.entry.levelProgress !== a.entry.levelProgress) {
+        return b.entry.levelProgress - a.entry.levelProgress;
+      }
+      return b.t - a.t;
+    })
+    .map(({ entry }) => entry);
+}
+
 export function subscribeLevelRankingsByClassCode(
   classCode: string,
-  callback: (byLevel: Record<number, LevelRankingEntry[]>) => void,
+  callback: (bundle: LiveRankingsBundle) => void,
 ): Unsubscribe {
   const studentsRef = ref(realtimeDb, "students");
   return onValue(studentsRef, (snapshot) => {
@@ -152,22 +191,18 @@ export function subscribeLevelRankingsByClassCode(
         online: Boolean(v?.online),
       });
     }
+    const classByLevel = emptyLevelRankings();
+    const perGroupByLevel = emptyPerGroupByLevel();
     for (let lv = 1; lv <= 6; lv += 1) {
-      buckets[lv] = buckets[lv]
-        .map((entry) => ({
-          entry,
-          t: Number((raw[entry.userId] as any)?.updatedAt ?? 0),
-        }))
-        .sort((a, b) => {
-          if (b.entry.levelProgress !== a.entry.levelProgress) {
-            return b.entry.levelProgress - a.entry.levelProgress;
-          }
-          return b.t - a.t;
-        })
-        .slice(0, RANKING_TOP_N)
-        .map(({ entry }) => entry);
+      const sorted = sortRankingEntries(buckets[lv], raw);
+      classByLevel[lv] = sorted.slice(0, RANKING_TOP_N);
+      for (const gid of [1, 2, 3, 4, 5] as GroupId[]) {
+        perGroupByLevel[lv][gid] = sorted
+          .filter((e) => e.groupId === gid)
+          .slice(0, RANKING_TOP_N);
+      }
     }
-    callback(buckets);
+    callback({ classByLevel, perGroupByLevel });
   });
 }
 

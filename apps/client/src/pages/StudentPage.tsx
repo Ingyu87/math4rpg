@@ -17,9 +17,11 @@ import {
 } from "../services/groupSession";
 import {
   classCodeExists,
+  emptyLiveRankingsBundle,
   isValidClassCode,
   subscribeLevelRankingsByClassCode,
   type LevelRankingEntry,
+  type LiveRankingsBundle,
 } from "../services/classCode";
 import {
   getLessonByLevel,
@@ -41,6 +43,72 @@ type CharacterOption = {
 };
 
 type Rect = { x: number; y: number; width: number; height: number };
+
+type RankingScope = "class" | "myGroup" | "allGroups";
+
+/** 숲에 돌아다니는 몬스터 한 마리 (96×32 워크 스트립 공통) */
+type WildMonster = {
+  id: string;
+  x: number;
+  y: number;
+  sprite: string;
+};
+
+const WILD_MONSTER_STRIPS = [
+  "/sprites/slime_walk_strip.svg",
+  "/sprites/cat_walk_strip.svg",
+  "/sprites/rabbit_walk_strip.svg",
+  "/sprites/fox_walk_strip.svg",
+  "/sprites/dog_walk_strip.svg",
+] as const;
+
+const WILD_MONSTER_COUNT_MIN = 4;
+const WILD_MONSTER_COUNT_MAX = 5;
+
+function pickWildMonsterCount() {
+  return (
+    WILD_MONSTER_COUNT_MIN +
+    Math.floor(Math.random() * (WILD_MONSTER_COUNT_MAX - WILD_MONSTER_COUNT_MIN + 1))
+  );
+}
+
+function shuffleStripOrder(count: number): string[] {
+  const pool = [...WILD_MONSTER_STRIPS];
+  for (let i = pool.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [pool[i], pool[j]] = [pool[j]!, pool[i]!];
+  }
+  return Array.from({ length: count }, (_, i) => pool[i % pool.length]!);
+}
+
+function spawnWildMonsters(playerPos?: { x: number; y: number }, count?: number): WildMonster[] {
+  const n = count ?? pickWildMonsterCount();
+  const sprites = shuffleStripOrder(n);
+  const placed: Array<{ x: number; y: number }> = [];
+  const out: WildMonster[] = [];
+  for (let i = 0; i < n; i += 1) {
+    const pos = randomMonsterPosition(playerPos, placed);
+    placed.push(pos);
+    out.push({
+      id: `wm_${Date.now()}_${i}_${Math.random().toString(36).slice(2, 7)}`,
+      x: pos.x,
+      y: pos.y,
+      sprite: sprites[i]!,
+    });
+  }
+  return out;
+}
+
+function seedMonsterVelocities(
+  monsters: WildMonster[],
+  ref: { current: Record<string, { vx: number; vy: number }> },
+) {
+  const next: Record<string, { vx: number; vy: number }> = {};
+  for (const m of monsters) {
+    next[m.id] = randomMonsterVelocity();
+  }
+  ref.current = next;
+}
 
 const ITEM_POOL = [
   "별 목걸이",
@@ -106,8 +174,11 @@ function intersectsAnyObstacle(entity: Rect) {
   return MAP_OBSTACLES.some((obstacle) => intersectsRect(entity, obstacle));
 }
 
-function randomMonsterPosition(playerPos?: { x: number; y: number }) {
-  for (let i = 0; i < 50; i += 1) {
+function randomMonsterPosition(
+  playerPos?: { x: number; y: number },
+  avoidOthers: Array<{ x: number; y: number }> = [],
+) {
+  for (let i = 0; i < 80; i += 1) {
     const candidate = {
       x: 24 + Math.floor(Math.random() * (WORLD_WIDTH - 48)),
       y: 24 + Math.floor(Math.random() * (WORLD_HEIGHT - 48)),
@@ -119,9 +190,12 @@ function randomMonsterPosition(playerPos?: { x: number; y: number }) {
       height: ENTITY_SIZE,
     };
     const tooCloseToPlayer =
-      playerPos &&
+      playerPos != null &&
       Math.hypot(candidate.x - playerPos.x, candidate.y - playerPos.y) < 88;
-    if (!intersectsAnyObstacle(hitbox) && !tooCloseToPlayer) {
+    const tooCloseToPeer = avoidOthers.some(
+      (o) => Math.hypot(candidate.x - o.x, candidate.y - o.y) < 56,
+    );
+    if (!intersectsAnyObstacle(hitbox) && !tooCloseToPlayer && !tooCloseToPeer) {
       return candidate;
     }
   }
@@ -192,21 +266,21 @@ export default function StudentPage() {
   const [playerPos, setPlayerPos] = useState({ x: 90, y: 120 });
   const [playerFacing, setPlayerFacing] = useState<Facing>("down");
   const [walkFrame, setWalkFrame] = useState(0);
-  const [monsterPos, setMonsterPos] = useState(randomMonsterPosition());
+  const [wildMonsters, setWildMonsters] = useState<WildMonster[]>(() => spawnWildMonsters());
   const [monsterFrame, setMonsterFrame] = useState(0);
-  const [levelRankings, setLevelRankings] = useState<Record<number, LevelRankingEntry[]>>({
-    1: [],
-    2: [],
-    3: [],
-    4: [],
-    5: [],
-    6: [],
-  });
+  const [liveRankings, setLiveRankings] = useState<LiveRankingsBundle>(() => emptyLiveRankingsBundle());
   const [rankingTab, setRankingTab] = useState(1);
+  const [rankingScope, setRankingScope] = useState<RankingScope>("class");
   const [groupMembers, setGroupMembers] = useState<GroupMemberSummary[]>([]);
   const joinedGroupRef = useRef<GroupId | null>(null);
   const playfieldRef = useRef<HTMLDivElement | null>(null);
-  const monsterVelRef = useRef(randomMonsterVelocity());
+  const monsterVelRef = useRef<Record<string, { vx: number; vy: number }>>({});
+
+  useEffect(() => {
+    seedMonsterVelocities(wildMonsters, monsterVelRef);
+    // 최초 스폰 팩만 시드 — 배회 중 setState마다 실행하면 안 됨
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const sessionUserId = useMemo(() => {
     const key = "math4rpg_user_id";
@@ -246,10 +320,10 @@ export default function StudentPage() {
 
   useEffect(() => {
     if (!joinedGroup || !isValidClassCode(classCode.trim())) {
-      setLevelRankings({ 1: [], 2: [], 3: [], 4: [], 5: [], 6: [] });
+      setLiveRankings(emptyLiveRankingsBundle());
       return;
     }
-    return subscribeLevelRankingsByClassCode(classCode.trim(), setLevelRankings);
+    return subscribeLevelRankingsByClassCode(classCode.trim(), setLiveRankings);
   }, [joinedGroup, classCode]);
 
   useEffect(() => {
@@ -373,73 +447,87 @@ export default function StudentPage() {
   useEffect(() => {
     if (currentQuestion || isCleared) return;
     const id = window.setInterval(() => {
-      setMonsterPos((prev) => {
-        let { vx, vy } = monsterVelRef.current;
-        if (Math.random() < 0.12) {
-          const turn = (Math.random() - 0.5) * 0.9;
-          const cos = Math.cos(turn);
-          const sin = Math.sin(turn);
-          const rx = vx * cos - vy * sin;
-          const ry = vx * sin + vy * cos;
-          const nv = clampMonsterVelocity({ vx: rx, vy: ry });
-          vx = nv.vx;
-          vy = nv.vy;
-          monsterVelRef.current = { vx, vy };
-        }
-        const v = monsterVelRef.current;
-        const rawX = prev.x + v.vx * MONSTER_WANDER_STEP;
-        const rawY = prev.y + v.vy * MONSTER_WANDER_STEP;
-        const half = ENTITY_SIZE / 2;
-        let nx = rawX;
-        let ny = rawY;
-        if (rawX < half) {
-          nx = half;
-          monsterVelRef.current.vx = Math.abs(v.vx) * 0.85 + 0.08;
-          monsterVelRef.current.vy += (Math.random() - 0.5) * 0.2;
-        } else if (rawX > WORLD_WIDTH - half) {
-          nx = WORLD_WIDTH - half;
-          monsterVelRef.current.vx = -Math.abs(v.vx) * 0.85 - 0.08;
-          monsterVelRef.current.vy += (Math.random() - 0.5) * 0.2;
-        }
-        if (rawY < half) {
-          ny = half;
-          monsterVelRef.current.vy = Math.abs(monsterVelRef.current.vy) * 0.85 + 0.08;
-          monsterVelRef.current.vx += (Math.random() - 0.5) * 0.2;
-        } else if (rawY > WORLD_HEIGHT - half) {
-          ny = WORLD_HEIGHT - half;
-          monsterVelRef.current.vy = -Math.abs(monsterVelRef.current.vy) * 0.85 - 0.08;
-          monsterVelRef.current.vx += (Math.random() - 0.5) * 0.2;
-        }
-        monsterVelRef.current = clampMonsterVelocity(monsterVelRef.current);
-        const hitbox = {
-          x: nx - half,
-          y: ny - half,
-          width: ENTITY_SIZE,
-          height: ENTITY_SIZE,
-        };
-        if (intersectsAnyObstacle(hitbox)) {
-          monsterVelRef.current = randomMonsterVelocity();
-          return prev;
-        }
-        return { x: nx, y: ny };
-      });
+      setWildMonsters((prev) =>
+        prev.map((m) => {
+          let v = monsterVelRef.current[m.id];
+          if (!v) {
+            v = randomMonsterVelocity();
+            monsterVelRef.current[m.id] = v;
+          }
+          if (Math.random() < 0.12) {
+            const turn = (Math.random() - 0.5) * 0.9;
+            const cos = Math.cos(turn);
+            const sin = Math.sin(turn);
+            const rx = v.vx * cos - v.vy * sin;
+            const ry = v.vx * sin + v.vy * cos;
+            v = clampMonsterVelocity({ vx: rx, vy: ry });
+            monsterVelRef.current[m.id] = v;
+          }
+          const vel = monsterVelRef.current[m.id] ?? v;
+          const rawX = m.x + vel.vx * MONSTER_WANDER_STEP;
+          const rawY = m.y + vel.vy * MONSTER_WANDER_STEP;
+          const half = ENTITY_SIZE / 2;
+          let nx = rawX;
+          let ny = rawY;
+          if (rawX < half) {
+            nx = half;
+            monsterVelRef.current[m.id] = {
+              vx: Math.abs(vel.vx) * 0.85 + 0.08,
+              vy: vel.vy + (Math.random() - 0.5) * 0.2,
+            };
+          } else if (rawX > WORLD_WIDTH - half) {
+            nx = WORLD_WIDTH - half;
+            monsterVelRef.current[m.id] = {
+              vx: -Math.abs(vel.vx) * 0.85 - 0.08,
+              vy: vel.vy + (Math.random() - 0.5) * 0.2,
+            };
+          }
+          if (rawY < half) {
+            ny = half;
+            const cur = monsterVelRef.current[m.id] ?? vel;
+            monsterVelRef.current[m.id] = {
+              vx: cur.vx + (Math.random() - 0.5) * 0.2,
+              vy: Math.abs(cur.vy) * 0.85 + 0.08,
+            };
+          } else if (rawY > WORLD_HEIGHT - half) {
+            ny = WORLD_HEIGHT - half;
+            const cur = monsterVelRef.current[m.id] ?? vel;
+            monsterVelRef.current[m.id] = {
+              vx: cur.vx + (Math.random() - 0.5) * 0.2,
+              vy: -Math.abs(cur.vy) * 0.85 - 0.08,
+            };
+          }
+          monsterVelRef.current[m.id] = clampMonsterVelocity(monsterVelRef.current[m.id] ?? vel);
+          const hitbox = {
+            x: nx - half,
+            y: ny - half,
+            width: ENTITY_SIZE,
+            height: ENTITY_SIZE,
+          };
+          if (intersectsAnyObstacle(hitbox)) {
+            monsterVelRef.current[m.id] = randomMonsterVelocity();
+            return m;
+          }
+          return { ...m, x: nx, y: ny };
+        }),
+      );
     }, MONSTER_WANDER_MS);
     return () => window.clearInterval(id);
   }, [currentQuestion, isCleared]);
 
   useEffect(() => {
     if (!joinedGroup || currentQuestion || isCleared) return;
-    const dx = playerPos.x - monsterPos.x;
-    const dy = playerPos.y - monsterPos.y;
-    const collided = Math.sqrt(dx * dx + dy * dy) < 38;
-    if (collided) {
+    const hit = wildMonsters.some(
+      (m) => Math.hypot(playerPos.x - m.x, playerPos.y - m.y) < 38,
+    );
+    if (hit) {
       const question = pickRandomQuestion(playerLevel);
       setCurrentQuestion(question);
       setBattleFeedback("");
       setSubjectiveAnswer("");
       pushToast("몬스터를 만났어요! 문제에 도전하세요.", "info");
     }
-  }, [joinedGroup, playerPos, monsterPos, currentQuestion, playerLevel, isCleared]);
+  }, [joinedGroup, playerPos, wildMonsters, currentQuestion, playerLevel, isCleared, pushToast]);
 
   const handleJoin = useCallback(async () => {
     const trimmed = nickname.trim();
@@ -478,8 +566,11 @@ export default function StudentPage() {
         setEarnedItems(persisted.earnedItems ?? []);
       }
       setJoinedGroup(selectedGroup);
-      monsterVelRef.current = randomMonsterVelocity();
-      setMonsterPos(randomMonsterPosition(playerPos));
+      {
+        const pack = spawnWildMonsters(playerPos);
+        seedMonsterVelocities(pack, monsterVelRef);
+        setWildMonsters(pack);
+      }
       setMessage(`${selectedGroup}모둠 입장 완료`);
       pushToast(`${selectedGroup}모둠에 입장했어요!`, "success");
     } catch (error) {
@@ -533,8 +624,11 @@ export default function StudentPage() {
         `정답! 몬스터 처치 성공 (+${newItem}) / ${currentQuestion.explanation}`,
       );
       pushToast(`정답! ${newItem} 획득`, "success");
-      monsterVelRef.current = randomMonsterVelocity();
-      setMonsterPos(randomMonsterPosition(playerPos));
+      {
+        const pack = spawnWildMonsters(playerPos);
+        seedMonsterVelocities(pack, monsterVelRef);
+        setWildMonsters(pack);
+      }
       if (joinedGroup) {
         void logBattleEvent({
           type: "BATTLE_CORRECT",
@@ -695,6 +789,26 @@ export default function StudentPage() {
   const partySize = displayMembers.length;
   const isPartySplit = Boolean(joinedGroup && partySize >= 2);
 
+  const rankingRows: LevelRankingEntry[] = useMemo(() => {
+    const lv = rankingTab;
+    if (rankingScope === "class") return liveRankings.classByLevel[lv] ?? [];
+    if (rankingScope === "myGroup" && joinedGroup != null) {
+      return liveRankings.perGroupByLevel[lv]?.[joinedGroup] ?? [];
+    }
+    return [];
+  }, [liveRankings, rankingTab, rankingScope, joinedGroup]);
+
+  const rankingSubLine = useMemo(() => {
+    const lesson = getLessonByLevel(rankingTab);
+    if (rankingScope === "class") {
+      return `같은 반 · 레벨 ${rankingTab} (차시 ${lesson}) · 반 전체 상위`;
+    }
+    if (rankingScope === "myGroup" && joinedGroup != null) {
+      return `${joinedGroup}모둠 안 · 레벨 ${rankingTab} (차시 ${lesson})`;
+    }
+    return `모둠별 · 레벨 ${rankingTab} (차시 ${lesson})`;
+  }, [rankingScope, rankingTab, joinedGroup]);
+
   const canAttemptJoin = useMemo(
     () =>
       nickname.trim().length > 0 &&
@@ -747,18 +861,19 @@ export default function StudentPage() {
           />
         </div>
       )}
-      <div
-        className="monster-sprite"
-        style={{ left: `${monsterPos.x}px`, top: `${monsterPos.y}px` }}
-      >
-        <div
-          className="sprite-body sprite-monster"
-          style={{
-            backgroundImage: "url('/sprites/slime_walk_strip.svg')",
-            backgroundPositionX: `${-monsterFrame * ENTITY_SIZE}px`,
-          }}
-        />
-      </div>
+      {wildMonsters.map((m, idx) => (
+        <div key={m.id} className="monster-sprite" style={{ left: `${m.x}px`, top: `${m.y}px` }}>
+          <div
+            className="sprite-body sprite-monster"
+            style={{
+              backgroundImage: `url(${m.sprite})`,
+              backgroundPositionX: `${-monsterFrame * ENTITY_SIZE}px`,
+              animationDelay: `${idx * 0.12}s`,
+              animationDuration: `${0.85 + (idx % 5) * 0.1}s`,
+            }}
+          />
+        </div>
+      ))}
     </>
   );
 
@@ -940,11 +1055,11 @@ export default function StudentPage() {
       </aside>
 
         <div className="student-page-col student-page-col--play" role="main">
-          <section className="page-card student-game-card">
+          <section
+            className={`page-card student-game-card${joinedGroup ? " student-game-card--with-ranking" : ""}`}
+          >
             <div className="student-play-viewport">
-        <div
-          className={`game-section-wrap${joinedGroup ? " game-section-wrap--with-ranking" : ""}`}
-        >
+        <div className="game-section-wrap">
           <div className="game-section-main">
             <h3>숲 마을 탐험</h3>
             <details className="game-help-details">
@@ -1039,50 +1154,127 @@ export default function StudentPage() {
             </div>
           )}
           </div>
-          {joinedGroup ? (
-            <aside className="live-ranking-panel" aria-label="실시간 레벨별 랭킹">
-              <div className="live-ranking-head">실시간 랭킹</div>
-              <p className="live-ranking-sub">
-                같은 반 · 게임 레벨 {rankingTab} (차시 {getLessonByLevel(rankingTab)})
-              </p>
-              <div className="live-ranking-tabs" role="tablist">
-                {[1, 2, 3, 4, 5, 6].map((lv) => (
-                  <button
-                    key={lv}
-                    type="button"
-                    role="tab"
-                    aria-selected={rankingTab === lv}
-                    className={rankingTab === lv ? "active" : ""}
-                    onClick={() => setRankingTab(lv)}
-                  >
-                    Lv{lv}
-                  </button>
-                ))}
-              </div>
-              <ol className="live-ranking-list">
-                {(levelRankings[rankingTab] ?? []).length === 0 ? (
-                  <li className="live-ranking-empty">이 레벨에 아직 순위가 없어요.</li>
-                ) : (
-                  (levelRankings[rankingTab] ?? []).map((row, idx) => (
-                    <li
-                      key={row.userId}
-                      className={row.userId === sessionUserId ? "is-me" : undefined}
-                    >
-                      <span className="rank-num">{idx + 1}</span>
-                      <span className="rank-name">{row.name}</span>
-                      <span className="rank-pct">{row.levelProgress}%</span>
-                      <span className="rank-meta" title={row.online ? "접속 중" : "오프라인"}>
-                        {row.groupId == null ? "미참가" : `${row.groupId}모둠`}{" "}
-                        {row.online ? "●" : "○"}
-                      </span>
-                    </li>
-                  ))
-                )}
-              </ol>
-            </aside>
-          ) : null}
         </div>
             </div>
+            {joinedGroup ? (
+              <aside
+                className={`live-ranking-panel live-ranking-panel--dock${
+                  rankingScope === "allGroups" ? " live-ranking-panel--by-groups" : ""
+                }`}
+                aria-label="실시간 레벨별 랭킹"
+              >
+                <div className="live-ranking-head">실시간 랭킹</div>
+                <div className="live-ranking-scopes" role="tablist" aria-label="랭킹 범위">
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={rankingScope === "class"}
+                    className={rankingScope === "class" ? "active" : ""}
+                    onClick={() => setRankingScope("class")}
+                  >
+                    반 전체
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={rankingScope === "myGroup"}
+                    className={rankingScope === "myGroup" ? "active" : ""}
+                    onClick={() => setRankingScope("myGroup")}
+                  >
+                    우리 모둠
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={rankingScope === "allGroups"}
+                    className={rankingScope === "allGroups" ? "active" : ""}
+                    onClick={() => setRankingScope("allGroups")}
+                  >
+                    모둠별
+                  </button>
+                </div>
+                <p className="live-ranking-sub">{rankingSubLine}</p>
+                <div className="live-ranking-tabs" role="tablist" aria-label="게임 레벨">
+                  {[1, 2, 3, 4, 5, 6].map((lv) => (
+                    <button
+                      key={lv}
+                      type="button"
+                      role="tab"
+                      aria-selected={rankingTab === lv}
+                      className={rankingTab === lv ? "active" : ""}
+                      onClick={() => setRankingTab(lv)}
+                    >
+                      Lv{lv}
+                    </button>
+                  ))}
+                </div>
+                {rankingScope === "allGroups" ? (
+                  <div className="live-ranking-by-groups">
+                    {([1, 2, 3, 4, 5] as const).map((gid) => {
+                      const rows = liveRankings.perGroupByLevel[rankingTab]?.[gid] ?? [];
+                      return (
+                        <div key={gid} className="live-ranking-mini">
+                          <h4 className="live-ranking-mini__title">{gid}모둠</h4>
+                          {rows.length === 0 ? (
+                            <p className="live-ranking-mini__empty">아직 순위 없음</p>
+                          ) : (
+                            <ol className="live-ranking-list live-ranking-list--compact">
+                              {rows.map((row, idx) => (
+                                <li
+                                  key={row.userId}
+                                  className={row.userId === sessionUserId ? "is-me" : undefined}
+                                >
+                                  <span className="rank-num">{idx + 1}</span>
+                                  <span className="rank-name">{row.name}</span>
+                                  <span className="rank-pct">{row.levelProgress}%</span>
+                                  <span
+                                    className="rank-meta"
+                                    title={row.online ? "접속 중" : "오프라인"}
+                                  >
+                                    {row.online ? "●" : "○"}
+                                  </span>
+                                </li>
+                              ))}
+                            </ol>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <ol className="live-ranking-list live-ranking-list--dock-wide">
+                    {rankingRows.length === 0 ? (
+                      <li className="live-ranking-empty">
+                        {rankingScope === "myGroup"
+                          ? "우리 모둠에 이 레벨 순위가 아직 없어요."
+                          : "이 레벨에 아직 순위가 없어요."}
+                      </li>
+                    ) : (
+                      rankingRows.map((row, idx) => (
+                        <li
+                          key={row.userId}
+                          className={row.userId === sessionUserId ? "is-me" : undefined}
+                        >
+                          <span className="rank-num">{idx + 1}</span>
+                          <span className="rank-name">{row.name}</span>
+                          <span className="rank-pct">{row.levelProgress}%</span>
+                          <span className="rank-meta" title={row.online ? "접속 중" : "오프라인"}>
+                            {rankingScope === "class" ? (
+                              <>
+                                {row.groupId == null ? "미참가" : `${row.groupId}모둠`}{" "}
+                                {row.online ? "●" : "○"}
+                              </>
+                            ) : (
+                              <>{row.online ? "●" : "○"}</>
+                            )}
+                          </span>
+                        </li>
+                      ))
+                    )}
+                  </ol>
+                )}
+              </aside>
+            ) : null}
         {currentQuestion && (
           <div className="battle-dialog">
             <p>
