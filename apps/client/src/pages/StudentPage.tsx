@@ -1,5 +1,6 @@
 import { onValue, ref as dbRef } from "firebase/database";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { motion } from "framer-motion";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { realtimeDb } from "../config/firebase";
 import { ACHIEVEMENT_COLORS, getAchievementByLevel } from "../config/achievement";
 import CuteToast from "../components/ui/CuteToast";
@@ -231,6 +232,29 @@ function clampMonsterVelocity(v: { vx: number; vy: number }) {
 const MONSTER_WANDER_MS = 340;
 const MONSTER_WANDER_STEP = 2.1;
 
+type Particle = {
+  x: number;
+  y: number;
+  size: number;
+  vx: number;
+  vy: number;
+  alpha: number;
+};
+
+const PARALLAX_CLOUDS = [
+  { left: "5%", top: "8%", scale: 1.1, duration: 62 },
+  { left: "28%", top: "14%", scale: 0.9, duration: 74 },
+  { left: "54%", top: "7%", scale: 1.2, duration: 68 },
+  { left: "80%", top: "12%", scale: 0.95, duration: 78 },
+] as const;
+
+const FRONT_LEAVES = [
+  { left: "4%", top: "18%", delay: 0 },
+  { left: "12%", top: "82%", delay: 1.2 },
+  { left: "88%", top: "10%", delay: 0.8 },
+  { left: "94%", top: "74%", delay: 1.7 },
+] as const;
+
 export default function StudentPage() {
   const [selectedGroup, setSelectedGroup] = useState<GroupId>(1);
   const [joinedGroup, setJoinedGroup] = useState<GroupId | null>(null);
@@ -298,12 +322,64 @@ export default function StudentPage() {
   const [groupMembers, setGroupMembers] = useState<GroupMemberSummary[]>([]);
   const joinedGroupRef = useRef<GroupId | null>(null);
   const playfieldRef = useRef<HTMLDivElement | null>(null);
+  const particleCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const particleFrameRef = useRef<number | null>(null);
+  const particlesRef = useRef<Particle[]>([]);
   const monsterVelRef = useRef<Record<string, { vx: number; vy: number }>>({});
 
   useEffect(() => {
     seedMonsterVelocities(wildMonsters, monsterVelRef);
     // 최초 스폰 팩만 시드 — 배회 중 setState마다 실행하면 안 됨
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    const canvas = particleCanvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    const initParticles = () => {
+      particlesRef.current = Array.from({ length: 28 }, () => ({
+        x: Math.random() * WORLD_WIDTH,
+        y: Math.random() * WORLD_HEIGHT,
+        size: 1 + Math.random() * 2.4,
+        vx: -0.16 + Math.random() * 0.32,
+        vy: -0.22 - Math.random() * 0.35,
+        alpha: 0.2 + Math.random() * 0.35,
+      }));
+    };
+
+    canvas.width = WORLD_WIDTH;
+    canvas.height = WORLD_HEIGHT;
+    initParticles();
+
+    const draw = () => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      for (const p of particlesRef.current) {
+        p.x += p.vx;
+        p.y += p.vy;
+        if (p.y < -8) {
+          p.y = canvas.height + 6;
+          p.x = Math.random() * canvas.width;
+        }
+        if (p.x < -8) p.x = canvas.width + 8;
+        if (p.x > canvas.width + 8) p.x = -8;
+
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(238, 255, 210, ${p.alpha})`;
+        ctx.fill();
+      }
+      particleFrameRef.current = window.requestAnimationFrame(draw);
+    };
+
+    particleFrameRef.current = window.requestAnimationFrame(draw);
+    return () => {
+      if (particleFrameRef.current != null) {
+        window.cancelAnimationFrame(particleFrameRef.current);
+      }
+    };
   }, []);
 
   const sessionUserId = useMemo(() => {
@@ -867,36 +943,63 @@ export default function StudentPage() {
 
   const forestScene = (
     <>
-      <div className="game-map-backdrop" aria-hidden />
-      <div className="game-map-path" aria-hidden />
-      <div className="game-map-decor" aria-hidden>
-        <span className="game-map-tree" style={{ left: 22, top: 198 }} />
-        <span className="game-map-tree game-map-tree--pine" style={{ left: 598, top: 42 }} />
-        <span className="game-map-tree" style={{ left: 520, top: 228 }} />
-        <span className="game-map-flower" style={{ left: 110, top: 268 }} />
-        <span className="game-map-flower game-map-flower--pink" style={{ left: 380, top: 288 }} />
-        <span className="game-map-flower game-map-flower--yellow" style={{ left: 250, top: 52 }} />
-        <span className="game-map-flower" style={{ left: 470, top: 118 }} />
-        <span className="game-map-bush" style={{ left: 44, top: 88 }} />
-        <span className="game-map-bush" style={{ left: 560, top: 168 }} />
+      <div className="game-layer game-layer--back" aria-hidden>
+        <div className="game-map-backdrop" />
+        <div className="game-parallax-hills game-parallax-hills--far" />
+        <div className="game-parallax-hills game-parallax-hills--mid" />
+        <div className="game-parallax-clouds">
+          {PARALLAX_CLOUDS.map((cloud, idx) => (
+            <span
+              key={`cloud-${idx}`}
+              className="game-parallax-cloud"
+              style={
+                {
+                  "--cloud-left": cloud.left,
+                  "--cloud-top": cloud.top,
+                  "--cloud-scale": cloud.scale,
+                  "--cloud-duration": `${cloud.duration}s`,
+                } as CSSProperties
+              }
+            />
+          ))}
+        </div>
       </div>
-      <div className="game-tiles" aria-hidden />
-      {MAP_OBSTACLES.map((obstacle, index) => (
-        <div
-          key={`${obstacle.x}-${obstacle.y}-${index}`}
-          className="map-obstacle"
-          style={{
-            left: `${obstacle.x}px`,
-            top: `${obstacle.y}px`,
-            width: `${obstacle.width}px`,
-            height: `${obstacle.height}px`,
-          }}
-        />
-      ))}
+
+      <div className="game-layer game-layer--mid" aria-hidden>
+        <div className="game-map-path" />
+        <div className="game-map-decor">
+          <span className="game-map-tree" style={{ left: 22, top: 198 }} />
+          <span className="game-map-tree game-map-tree--pine" style={{ left: 598, top: 42 }} />
+          <span className="game-map-tree" style={{ left: 520, top: 228 }} />
+          <span className="game-map-flower" style={{ left: 110, top: 268 }} />
+          <span className="game-map-flower game-map-flower--pink" style={{ left: 380, top: 288 }} />
+          <span className="game-map-flower game-map-flower--yellow" style={{ left: 250, top: 52 }} />
+          <span className="game-map-flower" style={{ left: 470, top: 118 }} />
+          <span className="game-map-bush" style={{ left: 44, top: 88 }} />
+          <span className="game-map-bush" style={{ left: 560, top: 168 }} />
+        </div>
+        <div className="game-tiles" />
+        {MAP_OBSTACLES.map((obstacle, index) => (
+          <div
+            key={`${obstacle.x}-${obstacle.y}-${index}`}
+            className="map-obstacle"
+            style={{
+              left: `${obstacle.x}px`,
+              top: `${obstacle.y}px`,
+              width: `${obstacle.width}px`,
+              height: `${obstacle.height}px`,
+            }}
+          />
+        ))}
+      </div>
+
+      <canvas ref={particleCanvasRef} className="game-particle-canvas" aria-hidden />
       {selectedCharacter && (
-        <div
+        <motion.div
           className="player-sprite"
           style={{ left: `${playerPos.x}px`, top: `${playerPos.y}px` }}
+          animate={walkFrame === 1 ? { scaleY: [1, 0.9, 1.08, 1] } : { scaleY: [1, 1.03, 1] }}
+          transition={{ duration: 0.5, ease: "easeOut" }}
         >
           <div
             className="sprite-body sprite-player"
@@ -907,7 +1010,7 @@ export default function StudentPage() {
               }px`,
             }}
           />
-        </div>
+        </motion.div>
       )}
       {wildMonsters.map((m, idx) => (
         <div key={m.id} className="monster-sprite" style={{ left: `${m.x}px`, top: `${m.y}px` }}>
@@ -922,6 +1025,22 @@ export default function StudentPage() {
           />
         </div>
       ))}
+
+      <div className="game-layer game-layer--front" aria-hidden>
+        {FRONT_LEAVES.map((leaf, idx) => (
+          <span
+            key={`front-leaf-${idx}`}
+            className="game-front-leaf"
+            style={
+              {
+                left: leaf.left,
+                top: leaf.top,
+                "--leaf-delay": `${leaf.delay}s`,
+              } as CSSProperties
+            }
+          />
+        ))}
+      </div>
     </>
   );
 
@@ -960,7 +1079,13 @@ export default function StudentPage() {
           ))}
         </div>
 
-        <div className="item-warehouse" aria-label="아이템 창고">
+        <motion.div
+          className="item-warehouse"
+          aria-label="아이템 창고"
+          initial={{ opacity: 0.92, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3, ease: "easeOut" }}
+        >
           <div className="item-warehouse__head">
             <span className="item-warehouse__icon" aria-hidden>
               📦
@@ -988,7 +1113,7 @@ export default function StudentPage() {
           {earnedItems.length > ITEM_WAREHOUSE_SLOTS ? (
             <p className="item-warehouse__more">+{earnedItems.length - ITEM_WAREHOUSE_SLOTS}개 더 있어요</p>
           ) : null}
-        </div>
+        </motion.div>
 
         {!joinedGroup ? (
           <div className="forest-gate-form">
@@ -1322,9 +1447,12 @@ export default function StudentPage() {
         </div>
             </div>
             {joinedGroup ? (
-              <aside
+              <motion.aside
                 className="live-ranking-panel live-ranking-panel--dock"
                 aria-label="실시간 레벨별 랭킹"
+                initial={{ opacity: 0.9, x: 12 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.32, ease: "easeOut" }}
               >
                 <div className="live-ranking-head">실시간 랭킹</div>
                 <div className="live-ranking-scopes" aria-label="랭킹 범위">
@@ -1365,7 +1493,7 @@ export default function StudentPage() {
                     ))
                   )}
                 </ol>
-              </aside>
+              </motion.aside>
             ) : null}
         {isCleared ? <p>축하합니다! 만렙 달성으로 게임이 종료되었습니다.</p> : null}
         {battleFeedback && <p style={{ marginTop: 10 }}>{battleFeedback}</p>}

@@ -252,6 +252,9 @@
 .student-page-layout .item-warehouse {
   padding: 8px 10px;
   margin-bottom: 10px;
+  background: rgb(255 255 255 / 62%);
+  border: 1px solid rgb(255 255 255 / 38%);
+  backdrop-filter: blur(8px);
 }
 
 .student-page-layout .item-warehouse__note {
@@ -307,6 +310,9 @@
 .student-page-layout .live-ranking-panel {
   font-size: 15px;
   padding: 14px 14px;
+  background: rgb(255 255 255 / 68%);
+  border: 1px solid rgb(255 255 255 / 42%);
+  backdrop-filter: blur(10px);
 }
 
 .student-page-layout .live-ranking-fixed-scope {
@@ -1114,12 +1120,29 @@ select {
   line-height: 1.45;
 }
 
-/* 동숲 느낌: 하늘·언덕·강·해변·풀 (레이어 순서 주의 — 아래가 먼저 그려짐) */
+/* 숲 레이어: back/mid/front 분리 */
+.game-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+}
+
+.game-layer--back {
+  z-index: 0;
+}
+
+.game-layer--mid {
+  z-index: 2;
+}
+
+.game-layer--front {
+  z-index: 7;
+}
+
 .game-map-backdrop {
   position: absolute;
   inset: 0;
-  z-index: 0;
-  pointer-events: none;
   border-radius: inherit;
   background:
     /* 구름 */
@@ -1138,7 +1161,45 @@ select {
     /* 해변·바다 띠 */
     linear-gradient(180deg, transparent 0 72%, #f2e4b8 72%, #e6d4a0 78%, #6ec4e8 84%, #4ab0dc 100%),
     /* 풀밭 베이스 */
-    linear-gradient(165deg, #c8f088 0%, #a8dc70 38%, #9ed460 58%, #b0e080 100%);
+    linear-gradient(165deg, #d5edb3 0%, #b8d998 35%, #abcf85 58%, #c4e2a8 100%);
+  box-shadow: inset 0 0 100px rgb(0 0 0 / 12%);
+}
+
+.game-parallax-hills {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+.game-parallax-hills--far {
+  background: radial-gradient(ellipse 72% 20% at 48% 26%, rgb(113 165 105 / 0.4) 0%, transparent 74%);
+  animation: hills-drift-far 45s ease-in-out infinite alternate;
+}
+
+.game-parallax-hills--mid {
+  background: radial-gradient(ellipse 64% 24% at 58% 30%, rgb(134 184 120 / 0.46) 0%, transparent 72%);
+  animation: hills-drift-mid 28s ease-in-out infinite alternate;
+}
+
+.game-parallax-clouds {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.game-parallax-cloud {
+  position: absolute;
+  left: var(--cloud-left);
+  top: var(--cloud-top);
+  width: 160px;
+  height: 52px;
+  border-radius: 999px;
+  transform: scale(var(--cloud-scale));
+  filter: blur(1.2px);
+  opacity: 0.58;
+  background: radial-gradient(ellipse at 50% 50%, rgb(255 255 255 / 0.95) 0%, rgb(255 255 255 / 0.1) 72%);
+  animation: cloud-float var(--cloud-duration) linear infinite alternate;
 }
 
 .game-map-path {
@@ -1155,14 +1216,13 @@ select {
   box-shadow:
     inset 0 2px 0 rgb(255 255 255 / 45%),
     0 2px 0 rgb(0 0 0 / 8%);
-  opacity: 0.72;
+  opacity: 0.66;
 }
 
 .game-map-decor {
   position: absolute;
   inset: 0;
-  z-index: 2;
-  pointer-events: none;
+  z-index: 3;
 }
 
 .game-map-tree {
@@ -1177,7 +1237,8 @@ select {
   background-size: 100% 68%, 10px 42%;
   background-position: center top, center bottom;
   background-repeat: no-repeat;
-  filter: drop-shadow(0 2px 0 rgb(0 0 0 / 12%));
+  filter: drop-shadow(3px 6px 0 rgb(0 0 0 / 10%));
+  animation: tree-sway 3.6s ease-in-out infinite alternate;
 }
 
 .game-map-tree--pine {
@@ -1192,6 +1253,7 @@ select {
   background-size: 100% 45%, 100% 38%, 12px 44%;
   background-position: center 0, center 8px, center bottom;
   background-repeat: no-repeat;
+  animation-duration: 4.3s;
 }
 
 .game-map-flower {
@@ -1219,16 +1281,17 @@ select {
   height: 16px;
   margin-left: -11px;
   margin-top: -8px;
-  border-radius: 50% 50% 45% 45%;
+  border-radius: 60% 40% 55% 45% / 45% 50% 50% 55%;
   background: radial-gradient(ellipse at 50% 30%, #b8e878 0%, #78b848 100%);
-  box-shadow: inset 0 -2px 0 rgb(0 0 0 / 8%);
+  box-shadow:
+    inset 0 -2px 0 rgb(0 0 0 / 8%),
+    2px 4px 0 rgb(90 140 70 / 20%);
 }
 
 .game-tiles {
   position: absolute;
   inset: 0;
-  z-index: 3;
-  pointer-events: none;
+  z-index: 4;
   opacity: 0.4;
   mix-blend-mode: soft-light;
   background-image:
@@ -1243,15 +1306,25 @@ select {
     52px 52px;
 }
 
+.game-particle-canvas {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
 .map-obstacle {
   position: absolute;
-  border-radius: 42% 58% 48% 52% / 48% 42% 58% 52%;
+  border-radius: 60% 40% 70% 30% / 40% 50% 60% 40%;
   border: 2px solid #6aa848;
   background:
-    radial-gradient(ellipse 80% 70% at 40% 35%, #d8f8a8 0%, #98d860 45%, #78b848 100%);
+    radial-gradient(ellipse 82% 72% at 40% 35%, #dff5b8 0%, #a5d87b 44%, #83ba5d 100%);
   box-shadow:
     inset 0 3px 6px rgb(255 255 255 / 35%),
-    0 3px 0 rgb(80 130 50 / 25%);
+    0 8px 0 rgb(80 130 50 / 22%);
+  filter: drop-shadow(4px 8px 0 rgb(0 0 0 / 10%));
   z-index: 4;
 }
 
@@ -1263,6 +1336,20 @@ select {
   display: grid;
   place-items: center;
   z-index: 6;
+}
+
+.game-front-leaf {
+  position: absolute;
+  width: 34px;
+  height: 20px;
+  margin-left: -17px;
+  margin-top: -10px;
+  border-radius: 68% 32% 60% 40% / 48% 45% 55% 52%;
+  background: linear-gradient(160deg, rgb(148 208 127 / 0.72) 0%, rgb(93 157 84 / 0.8) 100%);
+  filter: blur(0.2px);
+  opacity: 0.7;
+  animation: front-leaf-sway 3s ease-in-out infinite;
+  animation-delay: var(--leaf-delay);
 }
 
 .game-world .player-sprite {
@@ -1299,6 +1386,51 @@ select {
   border-radius: 14px;
   border: 1px solid #e0ccff;
   background: #fffaf0;
+}
+
+@keyframes cloud-float {
+  from {
+    transform: translateX(-14%) scale(var(--cloud-scale));
+  }
+  to {
+    transform: translateX(18%) scale(var(--cloud-scale));
+  }
+}
+
+@keyframes hills-drift-far {
+  from {
+    transform: translateX(-1%);
+  }
+  to {
+    transform: translateX(1.5%);
+  }
+}
+
+@keyframes hills-drift-mid {
+  from {
+    transform: translateX(0%);
+  }
+  to {
+    transform: translateX(2.2%);
+  }
+}
+
+@keyframes tree-sway {
+  from {
+    transform: rotate(-1deg);
+  }
+  to {
+    transform: rotate(1.6deg);
+  }
+}
+
+@keyframes front-leaf-sway {
+  from {
+    transform: rotate(-6deg) translateY(0);
+  }
+  to {
+    transform: rotate(4deg) translateY(-2px);
+  }
 }
 
 .battle-dialog .battle-achievement {
