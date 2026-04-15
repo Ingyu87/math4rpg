@@ -167,6 +167,33 @@ export function subscribeGroupCounts(callback: (counts: Record<number, number>) 
   });
 }
 
+export type GroupMemberSummary = {
+  userId: string;
+  userName: string;
+  joinedAt: number;
+};
+
+/** 같은 모둠에 입장한 멤버 목록 (입장 순). 최대 5명 */
+export function subscribeGroupMembers(
+  groupId: GroupId,
+  callback: (members: GroupMemberSummary[]) => void,
+) {
+  const membersRoot = ref(realtimeDb, `groups/${groupId}/members`);
+  return onValue(membersRoot, (snapshot) => {
+    const raw = snapshot.val() ?? {};
+    const list: GroupMemberSummary[] = Object.entries(raw).map(([userId, value]) => {
+      const v = value as { userName?: string; joinedAt?: number };
+      return {
+        userId,
+        userName: String(v?.userName ?? "학생"),
+        joinedAt: Number(v?.joinedAt ?? 0),
+      };
+    });
+    list.sort((a, b) => a.joinedAt - b.joinedAt);
+    callback(list);
+  });
+}
+
 export async function syncStudentBattleState(input: {
   userId: string;
   userName: string;

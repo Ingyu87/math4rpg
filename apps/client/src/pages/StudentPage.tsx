@@ -9,9 +9,16 @@ import {
   leaveGroup,
   logBattleEvent,
   subscribeGroupCounts,
+  subscribeGroupMembers,
   syncStudentBattleState,
+  type GroupMemberSummary,
 } from "../services/groupSession";
-import { classCodeExists, isValidClassCode } from "../services/classCode";
+import {
+  classCodeExists,
+  isValidClassCode,
+  subscribeLevelRankingsByClassCode,
+  type LevelRankingEntry,
+} from "../services/classCode";
 import {
   getLessonByLevel,
   normalizeAnswer,
@@ -23,6 +30,16 @@ type LevelStats = {
   wrong: number;
 };
 
+type Facing = "up" | "down" | "left" | "right";
+
+type CharacterOption = {
+  id: string;
+  name: string;
+  sprite: string;
+};
+
+type Rect = { x: number; y: number; width: number; height: number };
+
 const ITEM_POOL = [
   "별 목걸이",
   "하트 배지",
@@ -32,11 +49,31 @@ const ITEM_POOL = [
   "토끼 귀 장식",
 ];
 
-const CHARACTER_OPTIONS = [
-  { id: "dog", name: "멍멍이", emoji: "🐶" },
-  { id: "cat", name: "고양이", emoji: "🐱" },
-  { id: "rabbit", name: "토끼", emoji: "🐰" },
-  { id: "fox", name: "여우", emoji: "🦊" },
+const WORLD_WIDTH = 640;
+const WORLD_HEIGHT = 320;
+const ENTITY_SIZE = 32;
+
+const MAP_OBSTACLES: Rect[] = [
+  { x: 160, y: 70, width: 80, height: 42 },
+  { x: 300, y: 138, width: 70, height: 56 },
+  { x: 460, y: 60, width: 92, height: 40 },
+  { x: 70, y: 212, width: 112, height: 40 },
+  { x: 420, y: 230, width: 130, height: 46 },
+];
+
+/** 이동 방향 스프라이트: 상·우·하·좌 4방향 × 3프레임 (모둠 최대 5명과는 별개) */
+const FACING_ROW: Record<Facing, number> = {
+  up: 0,
+  right: 1,
+  down: 2,
+  left: 3,
+};
+
+const CHARACTER_OPTIONS: CharacterOption[] = [
+  { id: "dog", name: "멍멍이", sprite: "/sprites/dog_walk_sheet.svg" },
+  { id: "cat", name: "고양이", sprite: "/sprites/cat_walk_sheet.svg" },
+  { id: "rabbit", name: "토끼", sprite: "/sprites/rabbit_walk_sheet.svg" },
+  { id: "fox", name: "여우", sprite: "/sprites/fox_walk_sheet.svg" },
 ];
 
 function formatDuration(seconds: number) {
@@ -49,11 +86,39 @@ function randomItem() {
   return ITEM_POOL[Math.floor(Math.random() * ITEM_POOL.length)];
 }
 
-function randomMonsterPosition() {
-  return {
-    x: 60 + Math.floor(Math.random() * 520),
-    y: 70 + Math.floor(Math.random() * 220),
-  };
+function intersectsRect(entity: Rect, obstacle: Rect) {
+  return !(
+    entity.x + entity.width <= obstacle.x ||
+    entity.x >= obstacle.x + obstacle.width ||
+    entity.y + entity.height <= obstacle.y ||
+    entity.y >= obstacle.y + obstacle.height
+  );
+}
+
+function intersectsAnyObstacle(entity: Rect) {
+  return MAP_OBSTACLES.some((obstacle) => intersectsRect(entity, obstacle));
+}
+
+function randomMonsterPosition(playerPos?: { x: number; y: number }) {
+  for (let i = 0; i < 50; i += 1) {
+    const candidate = {
+      x: 24 + Math.floor(Math.random() * (WORLD_WIDTH - 48)),
+      y: 24 + Math.floor(Math.random() * (WORLD_HEIGHT - 48)),
+    };
+    const hitbox = {
+      x: candidate.x - ENTITY_SIZE / 2,
+      y: candidate.y - ENTITY_SIZE / 2,
+      width: ENTITY_SIZE,
+      height: ENTITY_SIZE,
+    };
+    const tooCloseToPlayer =
+      playerPos &&
+      Math.hypot(candidate.x - playerPos.x, candidate.y - playerPos.y) < 88;
+    if (!intersectsAnyObstacle(hitbox) && !tooCloseToPlayer) {
+      return candidate;
+    }
+  }
+  return { x: WORLD_WIDTH - 52, y: WORLD_HEIGHT - 52 };
 }
 
 export default function StudentPage() {
@@ -101,8 +166,21 @@ export default function StudentPage() {
     Array<{ id: string; message: string; tone: "success" | "info" | "warning" }>
   >([]);
 
-  const [playerPos, setPlayerPos] = useState({ x: 80, y: 120 });
+  const [playerPos, setPlayerPos] = useState({ x: 90, y: 120 });
+  const [playerFacing, setPlayerFacing] = useState<Facing>("down");
+  const [walkFrame, setWalkFrame] = useState(0);
   const [monsterPos, setMonsterPos] = useState(randomMonsterPosition());
+  const [monsterFrame, setMonsterFrame] = useState(0);
+  const [levelRankings, setLevelRankings] = useState<Record<number, LevelRankingEntry[]>>({
+    1: [],
+    2: [],
+    3: [],
+    4: [],
+    5: [],
+    6: [],
+  });
+  const [rankingTab, setRankingTab] = useState(1);
+  const [groupMembers, setGroupMembers] = useState<GroupMemberSummary[]>([]);
 
   const sessionUserId = useMemo(() => {
     const key = "math4rpg_user_id";
@@ -130,6 +208,26 @@ export default function StudentPage() {
   useEffect(() => subscribeGroupCounts(setCounts), []);
 
   useEffect(() => {
+    if (!joinedGroup) {
+      setGroupMembers([]);
+      return;
+    }
+    return subscribeGroupMembers(joinedGroup, setGroupMembers);
+  }, [joinedGroup]);
+
+  useEffect(() => {
+    if (!joinedGroup || !isValidClassCode(classCode.trim())) {
+      setLevelRankings({ 1: [], 2: [], 3: [], 4: [], 5: [], 6: [] });
+      return;
+    }
+    return subscribeLevelRankingsByClassCode(classCode.trim(), setLevelRankings);
+  }, [joinedGroup, classCode]);
+
+  useEffect(() => {
+    if (joinedGroup) setRankingTab(playerLevel);
+  }, [joinedGroup, playerLevel]);
+
+  useEffect(() => {
     const timer = setInterval(() => {
       setElapsedSec(Math.floor((Date.now() - sessionStartedAt) / 1000));
     }, 1000);
@@ -147,18 +245,48 @@ export default function StudentPage() {
   useEffect(() => {
     if (!joinedGroup || currentQuestion || isCleared) return;
     const onKeyDown = (event: KeyboardEvent) => {
-      const step = 16;
+      const step = 12;
+      let dx = 0;
+      let dy = 0;
+      let nextFacing: Facing = playerFacing;
+      const key = event.key.toLowerCase();
+      if (key === "arrowup" || key === "w") {
+        dy = -step;
+        nextFacing = "up";
+      }
+      if (key === "arrowdown" || key === "s") {
+        dy = step;
+        nextFacing = "down";
+      }
+      if (key === "arrowleft" || key === "a") {
+        dx = -step;
+        nextFacing = "left";
+      }
+      if (key === "arrowright" || key === "d") {
+        dx = step;
+        nextFacing = "right";
+      }
+      if (dx === 0 && dy === 0) return;
+      event.preventDefault();
+      setPlayerFacing(nextFacing);
       setPlayerPos((prev) => {
-        let x = prev.x;
-        let y = prev.y;
-        if (event.key === "ArrowUp" || event.key.toLowerCase() === "w") y -= step;
-        if (event.key === "ArrowDown" || event.key.toLowerCase() === "s") y += step;
-        if (event.key === "ArrowLeft" || event.key.toLowerCase() === "a") x -= step;
-        if (event.key === "ArrowRight" || event.key.toLowerCase() === "d") x += step;
-        return {
-          x: Math.max(20, Math.min(600, x)),
-          y: Math.max(20, Math.min(300, y)),
+        const x = Math.max(
+          ENTITY_SIZE / 2,
+          Math.min(WORLD_WIDTH - ENTITY_SIZE / 2, prev.x + dx),
+        );
+        const y = Math.max(
+          ENTITY_SIZE / 2,
+          Math.min(WORLD_HEIGHT - ENTITY_SIZE / 2, prev.y + dy),
+        );
+        const hitbox = {
+          x: x - ENTITY_SIZE / 2,
+          y: y - ENTITY_SIZE / 2,
+          width: ENTITY_SIZE,
+          height: ENTITY_SIZE,
         };
+        if (intersectsAnyObstacle(hitbox)) return prev;
+        setWalkFrame((frame) => (frame + 1) % 3);
+        return { x, y };
       });
     };
     window.addEventListener("keydown", onKeyDown);
@@ -167,9 +295,17 @@ export default function StudentPage() {
 
   useEffect(() => {
     if (!joinedGroup || currentQuestion || isCleared) return;
+    const timer = window.setInterval(() => {
+      setMonsterFrame((frame) => (frame + 1) % 3);
+    }, 220);
+    return () => window.clearInterval(timer);
+  }, [joinedGroup, currentQuestion, isCleared]);
+
+  useEffect(() => {
+    if (!joinedGroup || currentQuestion || isCleared) return;
     const dx = playerPos.x - monsterPos.x;
     const dy = playerPos.y - monsterPos.y;
-    const collided = Math.sqrt(dx * dx + dy * dy) < 34;
+    const collided = Math.sqrt(dx * dx + dy * dy) < 28;
     if (collided) {
       const question = pickRandomQuestion(playerLevel);
       setCurrentQuestion(question);
@@ -216,7 +352,7 @@ export default function StudentPage() {
         setEarnedItems(persisted.earnedItems ?? []);
       }
       setJoinedGroup(selectedGroup);
-      setMonsterPos(randomMonsterPosition());
+      setMonsterPos(randomMonsterPosition(playerPos));
       setMessage(`${selectedGroup}모둠 입장 완료`);
       pushToast(`${selectedGroup}모둠에 입장했어요!`, "success");
     } catch (error) {
@@ -262,7 +398,7 @@ export default function StudentPage() {
         `정답! 몬스터 처치 성공 (+${newItem}) / ${currentQuestion.explanation}`,
       );
       pushToast(`정답! ${newItem} 획득`, "success");
-      setMonsterPos(randomMonsterPosition());
+      setMonsterPos(randomMonsterPosition(playerPos));
       if (joinedGroup) {
         void logBattleEvent({
           type: "BATTLE_CORRECT",
@@ -403,6 +539,72 @@ export default function StudentPage() {
     earnedItems,
   ]);
 
+  const displayMembers = useMemo((): GroupMemberSummary[] => {
+    if (!joinedGroup) return [];
+    let list: GroupMemberSummary[] =
+      groupMembers.length > 0
+        ? [...groupMembers]
+        : [{ userId: sessionUserId, userName: nickname.trim() || "나", joinedAt: 0 }];
+    if (!list.some((m) => m.userId === sessionUserId)) {
+      list.push({
+        userId: sessionUserId,
+        userName: nickname.trim() || "나",
+        joinedAt: Date.now(),
+      });
+    }
+    list.sort((a, b) => a.joinedAt - b.joinedAt);
+    return list;
+  }, [joinedGroup, groupMembers, sessionUserId, nickname]);
+
+  const partySize = displayMembers.length;
+  const isPartySplit = Boolean(joinedGroup && partySize >= 2);
+
+  const forestScene = (
+    <>
+      <div className="game-tiles" />
+      {MAP_OBSTACLES.map((obstacle, index) => (
+        <div
+          key={`${obstacle.x}-${obstacle.y}-${index}`}
+          className="map-obstacle"
+          style={{
+            left: `${obstacle.x}px`,
+            top: `${obstacle.y}px`,
+            width: `${obstacle.width}px`,
+            height: `${obstacle.height}px`,
+          }}
+        />
+      ))}
+      {selectedCharacter && (
+        <div
+          className="player-sprite"
+          style={{ left: `${playerPos.x}px`, top: `${playerPos.y}px` }}
+        >
+          <div
+            className="sprite-body sprite-player"
+            style={{
+              backgroundImage: `url(${selectedCharacter.sprite})`,
+              backgroundPosition: `${-walkFrame * ENTITY_SIZE}px ${
+                -FACING_ROW[playerFacing] * ENTITY_SIZE
+              }px`,
+            }}
+          />
+        </div>
+      )}
+      <div
+        className="monster-sprite"
+        style={{ left: `${monsterPos.x}px`, top: `${monsterPos.y}px` }}
+      >
+        <div
+          className="sprite-body sprite-monster"
+          style={{
+            backgroundImage: "url('/sprites/slime_walk_strip.svg')",
+            backgroundPositionX: `${-monsterFrame * ENTITY_SIZE}px`,
+          }}
+        />
+      </div>
+    </>
+  );
+
   return (
     <>
       <section className="page-card">
@@ -415,7 +617,13 @@ export default function StudentPage() {
               className={`character-card ${selectedCharacterId === character.id ? "selected" : ""}`}
               onClick={() => setSelectedCharacterId(character.id)}
             >
-              <div className="character-emoji">{character.emoji}</div>
+              <div
+                className="character-portrait"
+                style={{
+                  backgroundImage: `url(${character.sprite})`,
+                  backgroundPosition: `0px ${-FACING_ROW.down * ENTITY_SIZE}px`,
+                }}
+              />
               <div>{character.name}</div>
             </button>
           ))}
@@ -424,7 +632,7 @@ export default function StudentPage() {
 
       <section className="page-card">
         <h2>숲 마을 입장 준비</h2>
-        <p>현재 캐릭터: {selectedCharacter ? `${selectedCharacter.emoji} ${selectedCharacter.name}` : "미선택"}</p>
+        <p>현재 캐릭터: {selectedCharacter ? selectedCharacter.name : "미선택"}</p>
         <p>모둠: {joinedGroup ? `${joinedGroup}모둠` : "미참가"}</p>
         <p>레벨: {playerLevel} (차시 {lesson})</p>
         <p>
@@ -480,26 +688,96 @@ export default function StudentPage() {
       </section>
 
       <section className="page-card">
-        <h3>숲 마을 탐험</h3>
-        <NpcBubble speaker="콩돌">
-          방향키(또는 WASD)로 이동해서 몬스터를 만나면 문제 전투가 시작돼요!
-        </NpcBubble>
-        <div className="game-world">
-          <div className="game-grass" />
-          {selectedCharacter && (
+        <div className="game-section-wrap">
+          {joinedGroup ? (
+            <aside className="live-ranking-panel" aria-label="실시간 레벨별 랭킹">
+              <div className="live-ranking-head">실시간 랭킹</div>
+              <p className="live-ranking-sub">
+                같은 반 · 게임 레벨 {rankingTab} (차시 {getLessonByLevel(rankingTab)})
+              </p>
+              <div className="live-ranking-tabs" role="tablist">
+                {[1, 2, 3, 4, 5, 6].map((lv) => (
+                  <button
+                    key={lv}
+                    type="button"
+                    role="tab"
+                    aria-selected={rankingTab === lv}
+                    className={rankingTab === lv ? "active" : ""}
+                    onClick={() => setRankingTab(lv)}
+                  >
+                    Lv{lv}
+                  </button>
+                ))}
+              </div>
+              <ol className="live-ranking-list">
+                {(levelRankings[rankingTab] ?? []).length === 0 ? (
+                  <li className="live-ranking-empty">이 레벨에 아직 순위가 없어요.</li>
+                ) : (
+                  (levelRankings[rankingTab] ?? []).map((row, idx) => (
+                    <li
+                      key={row.userId}
+                      className={row.userId === sessionUserId ? "is-me" : undefined}
+                    >
+                      <span className="rank-num">{idx + 1}</span>
+                      <span className="rank-name">{row.name}</span>
+                      <span className="rank-pct">{row.levelProgress}%</span>
+                      <span className="rank-meta" title={row.online ? "접속 중" : "오프라인"}>
+                        {row.groupId}모둠 {row.online ? "●" : "○"}
+                      </span>
+                    </li>
+                  ))
+                )}
+              </ol>
+            </aside>
+          ) : null}
+          <h3>숲 마을 탐험</h3>
+          <NpcBubble speaker="콩돌">
+            캐릭터는 위·아래·좌·우 4방향으로 걷고, 모둠은 최대 5칸까지 화면을 나눠 보여요. 혼자면 숲이 크게 펼쳐지고, 친구가 들어올 때마다 시트가 늘어나요. 방향키(또는 WASD)로 이동해 몬스터를 만나면 전투가 시작돼요!
+          </NpcBubble>
+          {!joinedGroup ? (
+            <div className="game-world game-world--preview">{forestScene}</div>
+          ) : (
             <div
-              className="player-sprite"
-              style={{ left: `${playerPos.x}px`, top: `${playerPos.y}px` }}
+              className={`party-layout ${
+                isPartySplit
+                  ? `party-layout--split party-layout--n${Math.min(partySize, 5)}`
+                  : "party-layout--solo"
+              }`}
             >
-              {selectedCharacter.emoji}
+              {displayMembers.map((m) => (
+                <div
+                  key={m.userId}
+                  className={`party-slot ${m.userId === sessionUserId ? "party-slot--me" : ""}`}
+                >
+                  <div className="party-slot-head">
+                    <span className="party-slot-badge">{m.userId === sessionUserId ? "나" : "친구"}</span>
+                    <span className="party-slot-name">{m.userName}</span>
+                  </div>
+                  {m.userId === sessionUserId ? (
+                    <div
+                      className={
+                        isPartySplit ? "party-game-scale" : "party-game-scale party-game-scale--solo"
+                      }
+                    >
+                      <div
+                        className={`game-world ${isPartySplit ? "game-world--party-slot" : "game-world--solo"}`}
+                      >
+                        {forestScene}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="party-peer-placeholder">
+                      <span className="party-peer-leaf" aria-hidden>
+                        🌿
+                      </span>
+                      <p className="party-peer-title">{m.userName}</p>
+                      <p className="party-peer-note">같은 모둠 · 이 기기에서는 내 숲만 조작해요</p>
+                    </div>
+                  )}
+                </div>
+              ))}
             </div>
           )}
-          <div
-            className="monster-sprite"
-            style={{ left: `${monsterPos.x}px`, top: `${monsterPos.y}px` }}
-          >
-            👾
-          </div>
         </div>
         {currentQuestion && (
           <div className="battle-dialog">

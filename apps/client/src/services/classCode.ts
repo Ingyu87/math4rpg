@@ -108,6 +108,61 @@ export function subscribeStudentsByClassCode(
   });
 }
 
+/** 같은 반·해당 게임 레벨에 머문 학생만 모아, 성취율(levelProgress) 순으로 정렬한 실시간 랭킹 */
+export type LevelRankingEntry = {
+  userId: string;
+  name: string;
+  levelProgress: number;
+  groupId: GroupId;
+  online: boolean;
+};
+
+const RANKING_TOP_N = 8;
+
+function emptyLevelRankings(): Record<number, LevelRankingEntry[]> {
+  return { 1: [], 2: [], 3: [], 4: [], 5: [], 6: [] };
+}
+
+export function subscribeLevelRankingsByClassCode(
+  classCode: string,
+  callback: (byLevel: Record<number, LevelRankingEntry[]>) => void,
+): Unsubscribe {
+  const studentsRef = ref(realtimeDb, "students");
+  return onValue(studentsRef, (snapshot) => {
+    const raw = snapshot.val() ?? {};
+    const buckets = emptyLevelRankings();
+    for (const [userId, value] of Object.entries(raw)) {
+      const v = value as any;
+      if (String(v?.classCode ?? "") !== classCode) continue;
+      const level = Number(v?.level ?? 1);
+      if (level < 1 || level > 6) continue;
+      buckets[level].push({
+        userId,
+        name: String(v?.name ?? "학생"),
+        levelProgress: Number(v?.levelProgress ?? 0),
+        groupId: Number(v?.groupId ?? 1) as GroupId,
+        online: Boolean(v?.online),
+      });
+    }
+    for (let lv = 1; lv <= 6; lv += 1) {
+      buckets[lv] = buckets[lv]
+        .map((entry) => ({
+          entry,
+          t: Number((raw[entry.userId] as any)?.updatedAt ?? 0),
+        }))
+        .sort((a, b) => {
+          if (b.entry.levelProgress !== a.entry.levelProgress) {
+            return b.entry.levelProgress - a.entry.levelProgress;
+          }
+          return b.t - a.t;
+        })
+        .slice(0, RANKING_TOP_N)
+        .map(({ entry }) => entry);
+    }
+    callback(buckets);
+  });
+}
+
 function toActivityLog(groupId: GroupId, id: string, value: any): ActivityLog {
   const extra =
     value && typeof value === "object"
