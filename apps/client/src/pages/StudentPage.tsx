@@ -231,6 +231,20 @@ function clampMonsterVelocity(v: { vx: number; vy: number }) {
 
 const MONSTER_WANDER_MS = 340;
 const MONSTER_WANDER_STEP = 2.1;
+const JOINED_GROUP_STORAGE_KEY = "math4rpg_joined_group";
+const BATTLE_DRAFT_STORAGE_PREFIX = "math4rpg_battle_draft_";
+const BATTLE_DRAFT_TTL_MS = 1000 * 60 * 60 * 6;
+
+function readJoinedGroupFromStorage(): GroupId | null {
+  const raw = localStorage.getItem(JOINED_GROUP_STORAGE_KEY);
+  const parsed = Number(raw);
+  if (parsed >= 1 && parsed <= 5) return parsed as GroupId;
+  return null;
+}
+
+function getBattleDraftStorageKey(userId: string) {
+  return `${BATTLE_DRAFT_STORAGE_PREFIX}${userId}`;
+}
 
 type Particle = {
   x: number;
@@ -257,7 +271,7 @@ const FRONT_LEAVES = [
 
 export default function StudentPage() {
   const [selectedGroup, setSelectedGroup] = useState<GroupId>(1);
-  const [joinedGroup, setJoinedGroup] = useState<GroupId | null>(null);
+  const [joinedGroup, setJoinedGroup] = useState<GroupId | null>(() => readJoinedGroupFromStorage());
   const [message, setMessage] = useState<string>("");
   const [nickname, setNickname] = useState<string>(
     localStorage.getItem("math4rpg_nickname") ?? "",
@@ -391,6 +405,7 @@ export default function StudentPage() {
     return generated;
   }, []);
   const sessionStartedAt = useMemo(() => Date.now(), []);
+  const battleDraftStorageKey = useMemo(() => getBattleDraftStorageKey(sessionUserId), [sessionUserId]);
 
   const selectedCharacter = useMemo(
     () => CHARACTER_OPTIONS.find((c) => c.id === selectedCharacterId),
@@ -442,12 +457,51 @@ export default function StudentPage() {
   }, [joinedGroup]);
 
   useEffect(() => {
-    return () => {
-      if (joinedGroup) {
-        void leaveGroup(joinedGroup, sessionUserId, nickname || "학생");
+    if (joinedGroup) {
+      localStorage.setItem(JOINED_GROUP_STORAGE_KEY, String(joinedGroup));
+      return;
+    }
+    localStorage.removeItem(JOINED_GROUP_STORAGE_KEY);
+  }, [joinedGroup]);
+
+  useEffect(() => {
+    const raw = localStorage.getItem(battleDraftStorageKey);
+    if (!raw) return;
+    try {
+      const parsed = JSON.parse(raw) as {
+        question?: BattleQuestion;
+        subjectiveAnswer?: string;
+        savedAt?: number;
+      };
+      const savedAt = Number(parsed?.savedAt ?? 0);
+      const isExpired = savedAt <= 0 || Date.now() - savedAt > BATTLE_DRAFT_TTL_MS;
+      if (isExpired || !parsed.question) {
+        localStorage.removeItem(battleDraftStorageKey);
+        return;
       }
-    };
-  }, [joinedGroup, sessionUserId, nickname]);
+      setCurrentQuestion(parsed.question);
+      setSubjectiveAnswer(String(parsed.subjectiveAnswer ?? ""));
+      setBattleFeedback("임시저장된 문제를 복원했어요.");
+      pushToast("새로고침 전 문제를 복원했어요.", "info");
+    } catch {
+      localStorage.removeItem(battleDraftStorageKey);
+    }
+  }, [battleDraftStorageKey, pushToast]);
+
+  useEffect(() => {
+    if (!currentQuestion) {
+      localStorage.removeItem(battleDraftStorageKey);
+      return;
+    }
+    localStorage.setItem(
+      battleDraftStorageKey,
+      JSON.stringify({
+        question: currentQuestion,
+        subjectiveAnswer,
+        savedAt: Date.now(),
+      }),
+    );
+  }, [battleDraftStorageKey, currentQuestion, subjectiveAnswer]);
 
   useEffect(() => {
     const r = dbRef(realtimeDb, `students/${sessionUserId}`);
@@ -1300,14 +1354,14 @@ export default function StudentPage() {
             <div className="student-play-viewport">
         <div className="game-section-wrap">
           <div className="game-section-main">
-            <h3>숲 마을 탐험</h3>
+            <h3>곱셈나눗셈 RPG</h3>
             {!joinedGroup ? (
               <div className="game-preview-shell">
                 <div
                   ref={playfieldRef}
                   tabIndex={0}
                   role="application"
-                  aria-label="숲 마을 미리보기"
+                  aria-label="곱셈나눗셈 RPG 미리보기"
                   className="game-world game-world--preview"
                   onPointerDown={(e) => {
                     (e.currentTarget as HTMLDivElement).focus({ preventScroll: true });
@@ -1371,7 +1425,7 @@ export default function StudentPage() {
                     ref={playfieldRef}
                     tabIndex={0}
                     role="application"
-                    aria-label="숲 마을 플레이 영역"
+                    aria-label="곱셈나눗셈 RPG 플레이 영역"
                     className="game-world game-world--solo"
                     onPointerDown={(e) => {
                       (e.currentTarget as HTMLDivElement).focus({ preventScroll: true });
@@ -1413,58 +1467,6 @@ export default function StudentPage() {
                     </button>
                   ))}
                 </div>
-                {currentQuestion ? (
-                  <div className="battle-dialog battle-dialog--in-ranking">
-                    <p className="battle-achievement">
-                      학습 목표{" "}
-                      <strong>
-                        {STUDENT_ACHIEVEMENT_LABEL[currentQuestion.achievementStandard] ??
-                          "현재 문제의 학습 목표를 확인해요"}
-                      </strong>
-                      {currentQuestion.questionKind && currentQuestion.questionKind !== "computation"
-                        ? ` · ${
-                            currentQuestion.questionKind === "estimate"
-                              ? "어림"
-                              : currentQuestion.questionKind === "principle"
-                                ? "원리"
-                                : ""
-                          }`
-                        : null}
-                    </p>
-                    {currentQuestion.situation ? (
-                      <p className="battle-situation">{currentQuestion.situation}</p>
-                    ) : null}
-                    <p>
-                      [{currentQuestion.type === "objective" ? "객관식" : "주관식"}]{" "}
-                      {currentQuestion.prompt}
-                    </p>
-                    {currentQuestion.type === "objective" ? (
-                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                        {(currentQuestion.choices ?? []).map((choice) => (
-                          <button key={choice} type="button" onClick={() => handleAnswer(choice)}>
-                            {choice}
-                          </button>
-                        ))}
-                      </div>
-                    ) : (
-                      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                        <input
-                          value={subjectiveAnswer}
-                          onChange={(e) => setSubjectiveAnswer(e.target.value)}
-                          placeholder={
-                            currentQuestion.level === 6
-                              ? "예: 12 ... 3 (몫 ... 나머지)"
-                              : "정답 입력"
-                          }
-                          style={{ padding: "8px 10px", borderRadius: 10 }}
-                        />
-                        <button type="button" onClick={() => handleAnswer(subjectiveAnswer)}>
-                          제출
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                ) : null}
                 <ol className="live-ranking-list live-ranking-list--dock-wide">
                   {rankingRows.length === 0 ? (
                     <li className="live-ranking-empty">이 레벨에 아직 순위가 없어요.</li>
@@ -1494,6 +1496,57 @@ export default function StudentPage() {
                 </details>
               </motion.aside>
             ) : null}
+        {currentQuestion ? (
+          <div className="battle-overlay" role="presentation">
+            <div className="battle-dialog battle-dialog--center" role="dialog" aria-modal="true">
+              <p className="battle-achievement">
+                학습 목표{" "}
+                <strong>
+                  {STUDENT_ACHIEVEMENT_LABEL[currentQuestion.achievementStandard] ??
+                    "현재 문제의 학습 목표를 확인해요"}
+                </strong>
+                {currentQuestion.questionKind && currentQuestion.questionKind !== "computation"
+                  ? ` · ${
+                      currentQuestion.questionKind === "estimate"
+                        ? "어림"
+                        : currentQuestion.questionKind === "principle"
+                          ? "원리"
+                          : ""
+                    }`
+                  : null}
+              </p>
+              {currentQuestion.situation ? (
+                <p className="battle-situation">{currentQuestion.situation}</p>
+              ) : null}
+              <p className="battle-question-text">
+                [{currentQuestion.type === "objective" ? "객관식" : "주관식"}] {currentQuestion.prompt}
+              </p>
+              {currentQuestion.type === "objective" ? (
+                <div className="battle-actions battle-actions--objective">
+                  {(currentQuestion.choices ?? []).map((choice) => (
+                    <button key={choice} type="button" onClick={() => handleAnswer(choice)}>
+                      {choice}
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div className="battle-actions battle-actions--subjective">
+                  <input
+                    value={subjectiveAnswer}
+                    onChange={(e) => setSubjectiveAnswer(e.target.value)}
+                    placeholder={
+                      currentQuestion.level === 6 ? "예: 12 ... 3 (몫 ... 나머지)" : "정답 입력"
+                    }
+                    style={{ padding: "10px 12px", borderRadius: 12 }}
+                  />
+                  <button type="button" onClick={() => handleAnswer(subjectiveAnswer)}>
+                    제출
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        ) : null}
         {isCleared ? <p>축하합니다! 만렙 달성으로 게임이 종료되었습니다.</p> : null}
         {battleFeedback && <p style={{ marginTop: 10 }}>{battleFeedback}</p>}
           </section>

@@ -1402,6 +1402,54 @@ select {
   box-shadow: 0 1px 0 rgb(0 0 0 / 6%);
 }
 
+.battle-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgb(18 17 31 / 35%);
+  backdrop-filter: blur(2px);
+}
+
+.battle-dialog--center {
+  width: min(92vw, 720px);
+  max-height: min(82dvh, 780px);
+  overflow-y: auto;
+  margin: 0;
+  padding: 20px;
+  border-radius: 20px;
+  border: 1px solid #cbb7ff;
+  box-shadow: 0 20px 48px rgb(23 16 43 / 22%);
+}
+
+.battle-question-text {
+  margin: 0 0 14px;
+  font-size: 1.06rem;
+  line-height: 1.55;
+  color: #2e2a38;
+}
+
+.battle-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.battle-actions--objective {
+  flex-wrap: wrap;
+}
+
+.battle-actions--subjective {
+  align-items: center;
+}
+
+.battle-actions--subjective input {
+  min-width: 0;
+  flex: 1 1 220px;
+}
+
 @keyframes cloud-float {
   from {
     transform: translateX(-14%) scale(var(--cloud-scale));

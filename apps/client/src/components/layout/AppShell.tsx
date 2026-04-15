@@ -23,7 +23,7 @@ export default function AppShell({ children }: PropsWithChildren) {
       <header className="app-header">
         <div>
           <h1 className="app-title">곱셈 나눗셈 수학 RPG</h1>
-          <p className="app-subtitle">숲 마을에서 즐기는 곱셈 나눗셈 모험</p>
+          <p className="app-subtitle">곱셈나눗셈 RPG로 즐기는 수학 모험</p>
         </div>
         <nav className="nav-links">
           <NavItem to="/" label="홈" />
