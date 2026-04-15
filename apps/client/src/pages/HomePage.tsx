@@ -1,6 +1,23 @@
-import { Link } from "react-router-dom";
+import { useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 
 export default function HomePage() {
+  const navigate = useNavigate();
+  const [classCode, setClassCode] = useState<string>(localStorage.getItem("math4rpg_class_code") ?? "");
+  const [errorMessage, setErrorMessage] = useState("");
+  const isStudentMode = (localStorage.getItem("math4rpg_user_mode") ?? "") === "student";
+
+  const handleStartGame = () => {
+    const code = classCode.trim();
+    if (!/^\d{5}$/.test(code)) {
+      setErrorMessage("반코드는 숫자 5자리로 입력해 주세요.");
+      return;
+    }
+    localStorage.setItem("math4rpg_class_code", code);
+    localStorage.setItem("math4rpg_user_mode", "student");
+    navigate("/student");
+  };
+
   return (
     <div className="home-entry-shell">
       <section className="page-card home-entry-card">
@@ -23,16 +40,33 @@ export default function HomePage() {
           <span className="home-char-tile home-char-tile--d">🦊</span>
         </div>
 
+        <label className="home-code-field">
+          <span className="home-code-field__label">반코드 입력</span>
+          <input
+            className="home-code-input"
+            value={classCode}
+            onChange={(e) => {
+              setClassCode(e.target.value.replace(/\D/g, "").slice(0, 5));
+              setErrorMessage("");
+            }}
+            placeholder="숫자 5자리"
+            inputMode="numeric"
+          />
+        </label>
+        {errorMessage ? <p className="home-code-error">{errorMessage}</p> : null}
+
         <div className="home-actions">
-          <Link to="/student" className="home-start-btn">
+          <button type="button" className="home-start-btn" onClick={handleStartGame}>
             <span className="home-start-btn__key" aria-hidden>
               ▶
             </span>
             <span className="home-start-btn__label">게임 시작하기</span>
-          </Link>
-          <Link to="/admin" className="home-admin-btn">
-            관리자 화면
-          </Link>
+          </button>
+          {!isStudentMode ? (
+            <Link to="/admin" className="home-admin-btn">
+              관리자 화면
+            </Link>
+          ) : null}
         </div>
       </section>
     </div>

@@ -1,4 +1,4 @@
-import type { PropsWithChildren } from "react";
+import { useEffect, useState, type PropsWithChildren } from "react";
 import { Link, useLocation } from "react-router-dom";
 
 function NavItem({ to, label }: { to: string; label: string }) {
@@ -17,6 +17,21 @@ function NavItem({ to, label }: { to: string; label: string }) {
 export default function AppShell({ children }: PropsWithChildren) {
   const { pathname } = useLocation();
   const studentLayout = pathname === "/student";
+  const [userMode, setUserMode] = useState<string>(() => localStorage.getItem("math4rpg_user_mode") ?? "");
+
+  useEffect(() => {
+    setUserMode(localStorage.getItem("math4rpg_user_mode") ?? "");
+  }, [pathname]);
+
+  useEffect(() => {
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === "math4rpg_user_mode") {
+        setUserMode(event.newValue ?? "");
+      }
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
 
   return (
     <div className={`app-shell${studentLayout ? " app-shell--student" : ""}`}>
@@ -27,7 +42,7 @@ export default function AppShell({ children }: PropsWithChildren) {
         </div>
         <nav className="nav-links">
           <NavItem to="/" label="홈" />
-          <NavItem to="/admin" label="관리자 화면" />
+          {userMode !== "student" ? <NavItem to="/admin" label="관리자 화면" /> : null}
         </nav>
       </header>
       <div className={studentLayout ? "app-shell-body" : "app-shell-body app-shell-body--default"}>

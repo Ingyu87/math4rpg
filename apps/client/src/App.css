@@ -2085,6 +2085,42 @@ select {
   background: linear-gradient(180deg, #d4f5c8 0%, #b8e8a8 100%);
 }
 
+.home-code-field {
+  width: min(420px, 100%);
+  display: grid;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.home-code-field__label {
+  font-size: 0.9rem;
+  font-weight: 800;
+  color: #415f2a;
+}
+
+.home-code-input {
+  width: 100%;
+  border: 2px solid #bfdc9c;
+  border-radius: 12px;
+  padding: 10px 12px;
+  font-size: 1rem;
+  background: rgb(255 255 255 / 88%);
+  color: #324922;
+}
+
+.home-code-input:focus {
+  outline: none;
+  border-color: #88bb57;
+  box-shadow: 0 0 0 3px rgb(136 187 87 / 25%);
+}
+
+.home-code-error {
+  margin: 4px 0 0;
+  color: #9b251a;
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+
 .home-actions {
   display: flex;
   flex-direction: column;
