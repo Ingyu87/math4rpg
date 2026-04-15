@@ -46,6 +46,11 @@ type Rect = { x: number; y: number; width: number; height: number };
 
 type RankingScope = "class" | "myGroup" | "allGroups";
 
+const STUDENT_ACHIEVEMENT_LABEL: Record<string, string> = {
+  "4수01-04": "세 자리 수의 곱셈 계산과 의미를 이해해 문제를 해결해요",
+  "4수01-07": "나눗셈에서 몫과 나머지의 관계를 이해해 계산해요",
+};
+
 /** 숲에 돌아다니는 몬스터 한 마리 (96×32 워크 스트립 공통) */
 type WildMonster = {
   id: string;
@@ -1221,7 +1226,11 @@ export default function StudentPage() {
         {currentQuestion && (
           <div className="battle-dialog">
             <p className="battle-achievement">
-              성취기준 <strong>{currentQuestion.achievementStandard}</strong>
+              학습 목표{" "}
+              <strong>
+                {STUDENT_ACHIEVEMENT_LABEL[currentQuestion.achievementStandard] ??
+                  "현재 문제의 학습 목표를 확인해요"}
+              </strong>
               {currentQuestion.questionKind && currentQuestion.questionKind !== "computation"
                 ? ` · ${
                     currentQuestion.questionKind === "estimate"
