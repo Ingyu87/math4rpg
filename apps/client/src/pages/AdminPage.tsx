@@ -8,6 +8,7 @@ import {
 } from "../config/achievement";
 import type { ActivityLog, GroupStatus, StudentStatus } from "../types/game";
 import {
+  isAdminEmailAllowed,
   observeAdminAuth,
   signInAdminWithGoogle,
   signOutAdmin,
@@ -75,13 +76,17 @@ export default function AdminPage() {
   const [aiGroupReport, setAiGroupReport] = useState<AiGroupAnalysis | null>(null);
   const [aiGroupError, setAiGroupError] = useState("");
   const [aiGroupLoading, setAiGroupLoading] = useState(false);
+  const isAuthorizedAdmin = Boolean(adminUser?.email && isAdminEmailAllowed(adminUser.email));
 
   useEffect(() => observeAdminAuth(setAdminUser), []);
 
   useEffect(() => {
-    if (!adminUser?.uid || !adminUser.email) return;
+    if (!adminUser?.uid || !adminUser.email || !isAuthorizedAdmin) {
+      setClassCode("");
+      return;
+    }
     ensureTeacherClassCode(adminUser.uid, adminUser.email).then(setClassCode);
-  }, [adminUser?.uid, adminUser?.email]);
+  }, [adminUser?.uid, adminUser?.email, isAuthorizedAdmin]);
 
   useEffect(() => {
     if (!classCode) return;
@@ -228,11 +233,29 @@ export default function AdminPage() {
     return (
       <section className="page-card">
         <h2>교사/관리자 로그인</h2>
-        <p>관리자 페이지는 Google 계정 로그인 후 이용할 수 있습니다.</p>
+        <p>관리자 페이지는 허용된 교사 Google 계정으로만 이용할 수 있습니다.</p>
         <button type="button" onClick={handleGoogleSignIn}>
           Google로 로그인
         </button>
         {authMessage && <p>{authMessage}</p>}
+      </section>
+    );
+  }
+
+  if (!isAuthorizedAdmin) {
+    return (
+      <section className="page-card">
+        <h2>접근 권한 없음</h2>
+        <p>허용된 교사 계정만 관리자 화면을 사용할 수 있습니다.</p>
+        <p>현재 로그인: {adminUser.email ?? "이메일 정보 없음"}</p>
+        <button
+          type="button"
+          onClick={() => {
+            void signOutAdmin();
+          }}
+        >
+          다른 계정으로 로그인
+        </button>
       </section>
     );
   }
