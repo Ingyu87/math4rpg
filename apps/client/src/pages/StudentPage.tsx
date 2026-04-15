@@ -705,7 +705,20 @@ export default function StudentPage() {
 
   const forestScene = (
     <>
-      <div className="game-tiles" />
+      <div className="game-map-backdrop" aria-hidden />
+      <div className="game-map-path" aria-hidden />
+      <div className="game-map-decor" aria-hidden>
+        <span className="game-map-tree" style={{ left: 22, top: 198 }} />
+        <span className="game-map-tree game-map-tree--pine" style={{ left: 598, top: 42 }} />
+        <span className="game-map-tree" style={{ left: 520, top: 228 }} />
+        <span className="game-map-flower" style={{ left: 110, top: 268 }} />
+        <span className="game-map-flower game-map-flower--pink" style={{ left: 380, top: 288 }} />
+        <span className="game-map-flower game-map-flower--yellow" style={{ left: 250, top: 52 }} />
+        <span className="game-map-flower" style={{ left: 470, top: 118 }} />
+        <span className="game-map-bush" style={{ left: 44, top: 88 }} />
+        <span className="game-map-bush" style={{ left: 560, top: 168 }} />
+      </div>
+      <div className="game-tiles" aria-hidden />
       {MAP_OBSTACLES.map((obstacle, index) => (
         <div
           key={`${obstacle.x}-${obstacle.y}-${index}`}
@@ -751,6 +764,8 @@ export default function StudentPage() {
 
   return (
     <>
+      <div className="student-page-layout">
+        <aside className="student-page-col student-page-col--side">
       <section className="page-card forest-hub-card">
         <div className="forest-ac-title" aria-hidden>
           <span className="forest-ac-title__tile forest-ac-title__tile--pink">숲</span>
@@ -880,11 +895,53 @@ export default function StudentPage() {
         </details>
         {message ? <p className="forest-prep-msg">{message}</p> : null}
         {!joinedGroup ? (
-          <p className="forest-ac-hint">아래 숲 미리보기 화면 맨 아래에서 <strong>Enter</strong>로도 입장할 수 있어요.</p>
+          <p className="forest-ac-hint">
+            오른쪽 숲 미리보기에 포커스 후 <strong>Enter</strong>로도 입장할 수 있어요.
+          </p>
         ) : null}
       </section>
 
-      <section className="page-card">
+      <section className="page-card student-summary-card">
+        <h3>활동 요약</h3>
+        <p className="student-summary-meta">
+          총 활동 {formatDuration(elapsedSec)} · 시도 {totalAttempts} · 정답 {totalCorrect} · 정답률{" "}
+          {recentAccuracy}%
+        </p>
+        <table className="student-table student-summary-table">
+          <thead>
+            <tr>
+              <th>레벨</th>
+              <th>차시</th>
+              <th>정답</th>
+              <th>오답</th>
+            </tr>
+          </thead>
+          <tbody>
+            {[1, 2, 3, 4, 5, 6].map((level) => (
+              <tr key={level}>
+                <td>{level}</td>
+                <td>{getLessonByLevel(level)}</td>
+                <td>{levelStats[level].correct}</td>
+                <td>{levelStats[level].wrong}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </section>
+
+      {isCleared ? (
+        <section className="page-card student-clear-card">
+          <h3>만렙 종료</h3>
+          <p>
+            총 풀이 {totalAttempts} / 정답 {totalCorrect} / 오답 {totalWrong} · {formatDuration(elapsedSec)}
+          </p>
+        </section>
+      ) : null}
+      </aside>
+
+        <div className="student-page-col student-page-col--play" role="main">
+          <section className="page-card student-game-card">
+            <div className="student-play-viewport">
         <div
           className={`game-section-wrap${joinedGroup ? " game-section-wrap--with-ranking" : ""}`}
         >
@@ -1024,6 +1081,7 @@ export default function StudentPage() {
             </aside>
           ) : null}
         </div>
+            </div>
         {currentQuestion && (
           <div className="battle-dialog">
             <p>
@@ -1055,51 +1113,9 @@ export default function StudentPage() {
         )}
         {isCleared ? <p>축하합니다! 만렙 달성으로 게임이 종료되었습니다.</p> : null}
         {battleFeedback && <p style={{ marginTop: 10 }}>{battleFeedback}</p>}
-      </section>
-
-      <section className="page-card">
-        <h3>활동 요약 리포트</h3>
-        <p>총 활동 시간: {formatDuration(elapsedSec)}</p>
-        <p>
-          전체 시도: {totalAttempts} / 전체 정답: {totalCorrect} / 전체 정답률:{" "}
-          {recentAccuracy}%
-        </p>
-        <table className="student-table">
-          <thead>
-            <tr>
-              <th>레벨</th>
-              <th>차시</th>
-              <th>정답</th>
-              <th>오답</th>
-            </tr>
-          </thead>
-          <tbody>
-            {[1, 2, 3, 4, 5, 6].map((level) => (
-              <tr key={level}>
-                <td>{level}</td>
-                <td>{getLessonByLevel(level)}</td>
-                <td>{levelStats[level].correct}</td>
-                <td>{levelStats[level].wrong}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </section>
-
-      {isCleared && (
-        <section className="page-card">
-          <h3>만렙 종료 리포트</h3>
-          <p>
-            최종 레벨: <strong>6 (확장)</strong>
-          </p>
-          <p>
-            총 풀이 {totalAttempts}문항 / 정답 {totalCorrect}문항 / 오답 {totalWrong}문항
-          </p>
-          <p>총 플레이 시간: {formatDuration(elapsedSec)}</p>
-          <p>최종 캐릭터 외형 단계: {appearanceTier}단계</p>
-          <p>획득 아이템/장신구: {earnedItems.length === 0 ? "없음" : earnedItems.join(", ")}</p>
-        </section>
-      )}
+          </section>
+        </div>
+      </div>
 
       <div className="toast-stack">
         {toasts.map((toast) => (

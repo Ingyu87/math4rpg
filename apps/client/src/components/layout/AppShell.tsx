@@ -15,8 +15,11 @@ function NavItem({ to, label }: { to: string; label: string }) {
 }
 
 export default function AppShell({ children }: PropsWithChildren) {
+  const { pathname } = useLocation();
+  const studentLayout = pathname === "/student";
+
   return (
-    <div className="app-shell">
+    <div className={`app-shell${studentLayout ? " app-shell--student" : ""}`}>
       <header className="app-header">
         <div>
           <h1 className="app-title">곱셈 나눗셈 수학 RPG</h1>
@@ -27,7 +30,9 @@ export default function AppShell({ children }: PropsWithChildren) {
           <NavItem to="/admin" label="관리자 화면" />
         </nav>
       </header>
-      {children}
+      <div className={studentLayout ? "app-shell-body" : "app-shell-body app-shell-body--default"}>
+        {children}
+      </div>
     </div>
   );
 }

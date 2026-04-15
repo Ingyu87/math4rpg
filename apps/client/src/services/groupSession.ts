@@ -3,7 +3,6 @@ import {
   onValue,
   push,
   ref,
-  remove,
   runTransaction,
   set,
   update,
@@ -50,6 +49,23 @@ function memberRef(db: Database, groupId: GroupId, userId: string) {
   return ref(db, `groups/${groupId}/members/${userId}`);
 }
 
+function membersRootRef(db: Database, groupId: GroupId) {
+  return ref(db, `groups/${groupId}/members`);
+}
+
+function parseMembersMap(current: unknown): Record<string, GroupSessionInfo> {
+  if (current == null || typeof current !== "object" || Array.isArray(current)) {
+    return {};
+  }
+  return current as Record<string, GroupSessionInfo>;
+}
+
+async function setOnlineCountFromMembers(groupId: GroupId) {
+  const snap = await get(membersRootRef(realtimeDb, groupId));
+  const n = snap.exists() ? Object.keys(snap.val() as object).length : 0;
+  await set(groupCountRef(realtimeDb, groupId), n);
+}
+
 async function pushActivityLog(payload: ActivityLogPayload) {
   const eventRef = push(ref(realtimeDb, `activityLogs/${payload.groupId}`));
   await set(eventRef, {
@@ -69,28 +85,49 @@ export async function joinGroup(
   userName: string,
   classCode: string,
 ) {
-  const countRef = groupCountRef(realtimeDb, groupId);
-  const tx = await runTransaction(countRef, (current) => {
-    const value = typeof current === "number" ? current : 0;
-    if (value >= MAX_GROUP_SIZE) {
+  const membersRoot = membersRootRef(realtimeDb, groupId);
+  const existingMember = await get(memberRef(realtimeDb, groupId, userId));
+
+  const joinedAt = Date.now();
+  const session: GroupSessionInfo = {
+    userId,
+    userName,
+    classCode,
+    groupId,
+    joinedAt,
+  };
+
+  /** 이미 이 모둠 멤버면 카운트만 맞추고 학생 노드만 갱신 (탭 복구·새로고침) */
+  if (existingMember.exists()) {
+    await update(ref(realtimeDb, `students/${userId}`), {
+      userId,
+      name: userName,
+      classCode,
+      groupId,
+      online: true,
+      updatedAt: Date.now(),
+    });
+    await setOnlineCountFromMembers(groupId);
+    return;
+  }
+
+  const tx = await runTransaction(membersRoot, (current) => {
+    const cur = parseMembersMap(current);
+    if (cur[userId]) {
+      return cur;
+    }
+    if (Object.keys(cur).length >= MAX_GROUP_SIZE) {
       return;
     }
-    return value + 1;
+    return { ...cur, [userId]: session };
   });
 
   if (!tx.committed) {
     throw new Error("선택한 모둠 인원이 가득 찼습니다.");
   }
 
-  const session: GroupSessionInfo = {
-    userId,
-    userName,
-    classCode,
-    groupId,
-    joinedAt: Date.now(),
-  };
+  await setOnlineCountFromMembers(groupId);
 
-  await set(memberRef(realtimeDb, groupId, userId), session);
   await update(ref(realtimeDb, `students/${userId}`), {
     userId,
     name: userName,
@@ -111,17 +148,32 @@ export async function joinGroup(
 export async function leaveGroup(groupId: GroupId, userId: string, userName: string) {
   const targetMemberRef = memberRef(realtimeDb, groupId, userId);
   const snapshot = await get(targetMemberRef);
+  const membersRoot = membersRootRef(realtimeDb, groupId);
+
   if (!snapshot.exists()) {
+    await update(ref(realtimeDb, `students/${userId}`), {
+      groupId: null,
+      online: false,
+      updatedAt: Date.now(),
+    });
+    await setOnlineCountFromMembers(groupId);
     return;
   }
 
-  await remove(targetMemberRef);
-  await runTransaction(groupCountRef(realtimeDb, groupId), (current) => {
-    const value = typeof current === "number" ? current : 0;
-    return Math.max(0, value - 1);
+  const classCode = (snapshot.val() as { classCode?: string })?.classCode ?? "";
+
+  await runTransaction(membersRoot, (current) => {
+    const cur = parseMembersMap(current);
+    if (!cur[userId]) {
+      return cur;
+    }
+    const next = { ...cur };
+    delete next[userId];
+    return Object.keys(next).length === 0 ? null : next;
   });
 
-  const classCode = snapshot.val()?.classCode ?? "";
+  await setOnlineCountFromMembers(groupId);
+
   await pushActivityLog({
     type: "LEAVE_GROUP",
     userId,
@@ -153,16 +205,24 @@ export async function getStudentState(userId: string): Promise<PersistedStudentS
   };
 }
 
+function memberCountFromGroupNode(groupNode: unknown): number {
+  if (!groupNode || typeof groupNode !== "object") return 0;
+  const members = (groupNode as { members?: unknown }).members;
+  if (!members || typeof members !== "object" || Array.isArray(members)) return 0;
+  return Object.keys(members as object).length;
+}
+
+/** 드롭다운 (n/5): `members` 실제 키 개수 기준 — `onlineCount`와 불일치해도 화면은 멤버 기준 */
 export function subscribeGroupCounts(callback: (counts: Record<number, number>) => void) {
   const countsRoot = ref(realtimeDb, "groups");
   return onValue(countsRoot, (snapshot) => {
     const raw = snapshot.val() ?? {};
     callback({
-      1: raw?.["1"]?.onlineCount ?? 0,
-      2: raw?.["2"]?.onlineCount ?? 0,
-      3: raw?.["3"]?.onlineCount ?? 0,
-      4: raw?.["4"]?.onlineCount ?? 0,
-      5: raw?.["5"]?.onlineCount ?? 0,
+      1: memberCountFromGroupNode(raw?.["1"]),
+      2: memberCountFromGroupNode(raw?.["2"]),
+      3: memberCountFromGroupNode(raw?.["3"]),
+      4: memberCountFromGroupNode(raw?.["4"]),
+      5: memberCountFromGroupNode(raw?.["5"]),
     });
   });
 }

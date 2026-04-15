@@ -5,6 +5,220 @@
   padding: 24px;
 }
 
+.app-shell--student {
+  max-width: none;
+  width: 100%;
+  min-height: 100dvh;
+  max-height: 100dvh;
+  padding: 8px 12px 10px;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.app-shell--student .app-header {
+  flex-shrink: 0;
+  margin-bottom: 8px;
+  padding: 10px 14px;
+  border-radius: 18px;
+}
+
+.app-shell-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-shell-body--default {
+  flex: none;
+  min-height: unset;
+  overflow: visible;
+}
+
+.app-shell--student .app-shell-body {
+  overflow: hidden;
+}
+
+/* 학생(/student): 좌 정보 · 우 플레이 — 와이드 16:9에 맞춰 한 화면 */
+.student-page-layout {
+  display: grid;
+  grid-template-columns: minmax(252px, min(34vw, 380px)) minmax(0, 1fr);
+  gap: 10px;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  align-items: stretch;
+}
+
+@media (max-width: 960px) {
+  .student-page-layout {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto minmax(280px, 1fr);
+    overflow-y: auto;
+  }
+
+  .app-shell--student {
+    max-height: none;
+    overflow-y: auto;
+  }
+}
+
+.student-page-col {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.student-page-col--side {
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+
+.student-page-col--play {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.student-page-layout .page-card {
+  margin-bottom: 0;
+}
+
+.student-summary-card,
+.student-clear-card {
+  padding: 12px 14px;
+  flex-shrink: 0;
+}
+
+.student-summary-meta {
+  margin: 0 0 8px;
+  font-size: 0.82rem;
+  color: #5f6d42;
+}
+
+.student-summary-table {
+  font-size: 0.78rem;
+}
+
+.student-summary-table th,
+.student-summary-table td {
+  padding: 4px 6px;
+}
+
+.student-game-card {
+  flex: 1;
+  min-height: 0;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.student-play-viewport {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.student-page-layout .student-play-viewport > .game-section-wrap {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.student-page-layout .game-section-wrap--with-ranking {
+  grid-template-columns: minmax(0, 1fr) minmax(112px, 140px);
+  gap: 8px;
+}
+
+.student-page-layout .forest-hub-card {
+  padding: 12px 14px;
+  flex-shrink: 0;
+}
+
+.student-page-layout .forest-ac-title__tile {
+  min-width: 48px;
+  min-height: 48px;
+  font-size: 1.35rem;
+}
+
+.student-page-layout .forest-ac-villager-row {
+  margin-bottom: 10px;
+}
+
+.student-page-layout .ac-villager-tile {
+  min-width: 76px;
+  padding: 6px 8px;
+}
+
+.student-page-layout .ac-villager-tile__portrait {
+  /* 스프라이트 한 칸(32px)과 동일 — 큰 박스면 옆 프레임이 같이 보임 */
+  width: 32px;
+  height: 32px;
+}
+
+.student-page-layout .item-warehouse {
+  padding: 8px 10px;
+  margin-bottom: 10px;
+}
+
+.student-page-layout .item-warehouse__note {
+  display: none;
+}
+
+.student-page-layout .item-warehouse__grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.student-page-layout .item-warehouse-slot__text {
+  font-size: 0.62rem;
+}
+
+.student-page-layout .game-world--preview,
+.student-page-layout .game-world--solo {
+  width: 100%;
+  max-width: none;
+  margin-top: 4px;
+  aspect-ratio: 16 / 9;
+  height: auto;
+  max-height: min(42dvh, calc(100dvh - 240px));
+  min-height: 180px;
+}
+
+.student-page-layout .party-game-scale--solo {
+  min-height: 0;
+  max-height: min(52dvh, calc(100dvh - 200px));
+}
+
+.student-page-layout .game-world--solo {
+  transform: scale(clamp(0.88, 1.02, 1.22));
+}
+
+.student-page-layout .game-world--party-slot {
+  transform: scale(0.78);
+}
+
+.student-page-layout .party-layout--split .party-game-scale {
+  min-height: 160px;
+  height: min(34dvh, 280px);
+}
+
+.student-page-layout .live-ranking-panel {
+  font-size: 11px;
+  padding: 8px 8px;
+}
+
+.student-page-layout .game-section-main h3 {
+  margin: 0 0 4px;
+  font-size: 1rem;
+}
+
 .app-header {
   background: linear-gradient(180deg, #fffef3 0%, #f5ffe9 100%);
   border: 3px solid #d8e9ae;
@@ -411,10 +625,14 @@ select {
   max-width: 640px;
   height: 320px;
   margin-top: 10px;
-  border-radius: 16px;
+  border-radius: 20px;
   overflow: visible;
-  border: 2px solid #d6efae;
-  background: linear-gradient(180deg, #dbf3ff 0%, #cced95 45%, #b8e07e 100%);
+  border: 3px solid #b0d97a;
+  background: transparent;
+  box-shadow:
+    0 8px 0 #98c86a,
+    inset 0 0 0 1px rgb(255 255 255 / 35%),
+    inset 0 -30px 50px rgb(120 180 90 / 18%);
 }
 
 .game-world:focus {
@@ -655,25 +873,145 @@ select {
   line-height: 1.35;
 }
 
+/* 동숲 느낌: 하늘·언덕·강·해변·풀 (레이어 순서 주의 — 아래가 먼저 그려짐) */
+.game-map-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  background:
+    /* 구름 */
+    radial-gradient(ellipse 70px 26px at 18% 9%, rgb(255 255 255 / 0.95) 0%, transparent 72%),
+    radial-gradient(ellipse 90px 30px at 72% 6%, rgb(255 255 255 / 0.88) 0%, transparent 70%),
+    radial-gradient(ellipse 50px 20px at 48% 11%, rgb(255 255 255 / 0.55) 0%, transparent 75%),
+    /* 태양광 */
+    radial-gradient(circle 72px at 86% 8%, rgb(255 252 210 / 0.95) 0%, transparent 78%),
+    /* 먼 언덕 */
+    radial-gradient(ellipse 140% 40px at 50% 24%, rgb(120 190 100 / 0.55) 0%, transparent 70%),
+    /* 강 (곡선 느낌 이중 타원) */
+    radial-gradient(ellipse 55% 42% at 44% 58%, rgb(130 210 255 / 0.92) 0%, rgb(100 190 245 / 0.55) 42%, transparent 58%),
+    radial-gradient(ellipse 40% 55% at 58% 72%, rgb(120 200 250 / 0.75) 0%, transparent 55%),
+    /* 하늘 */
+    linear-gradient(180deg, #6ec8ff 0%, #9ee0ff 14%, #c8f5d8 22%, #b8e8a0 30%, transparent 36%),
+    /* 해변·바다 띠 */
+    linear-gradient(180deg, transparent 0 72%, #f2e4b8 72%, #e6d4a0 78%, #6ec4e8 84%, #4ab0dc 100%),
+    /* 풀밭 베이스 */
+    linear-gradient(165deg, #c8f088 0%, #a8dc70 38%, #9ed460 58%, #b0e080 100%);
+}
+
+.game-map-path {
+  position: absolute;
+  left: 72px;
+  top: 168px;
+  width: 260px;
+  height: 44px;
+  z-index: 1;
+  pointer-events: none;
+  border-radius: 999px;
+  transform: rotate(-7deg);
+  background: linear-gradient(180deg, #f0e0c0 0%, #dcc8a0 55%, #c8b088 100%);
+  box-shadow:
+    inset 0 2px 0 rgb(255 255 255 / 45%),
+    0 2px 0 rgb(0 0 0 / 8%);
+  opacity: 0.72;
+}
+
+.game-map-decor {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.game-map-tree {
+  position: absolute;
+  width: 32px;
+  height: 40px;
+  margin-left: -16px;
+  margin-top: -40px;
+  background:
+    radial-gradient(circle 15px at 50% 28%, #8ee060 0%, #6cc040 70%, #4a9828 100%),
+    linear-gradient(180deg, #c8a868 0%, #907040 100%);
+  background-size: 100% 68%, 10px 42%;
+  background-position: center top, center bottom;
+  background-repeat: no-repeat;
+  filter: drop-shadow(0 2px 0 rgb(0 0 0 / 12%));
+}
+
+.game-map-tree--pine {
+  width: 28px;
+  height: 46px;
+  margin-left: -14px;
+  margin-top: -46px;
+  background:
+    radial-gradient(ellipse 70% 38% at 50% 22%, #4a9048 0%, #2d6028 100%),
+    radial-gradient(ellipse 55% 32% at 50% 38%, #5aa050 0%, transparent 100%),
+    linear-gradient(180deg, #6a5840 0%, #403428 100%);
+  background-size: 100% 45%, 100% 38%, 12px 44%;
+  background-position: center 0, center 8px, center bottom;
+  background-repeat: no-repeat;
+}
+
+.game-map-flower {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  margin-left: -7px;
+  margin-top: -7px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #fff 0%, #ff9ec8 40%, #ff7eb8 100%);
+  box-shadow: 0 1px 0 rgb(0 0 0 / 10%);
+}
+
+.game-map-flower--pink {
+  background: radial-gradient(circle at 35% 35%, #fff 0%, #ffb0e8 45%, #ff88d8 100%);
+}
+
+.game-map-flower--yellow {
+  background: radial-gradient(circle at 35% 35%, #fff 0%, #fff4a8 40%, #ffe060 100%);
+}
+
+.game-map-bush {
+  position: absolute;
+  width: 22px;
+  height: 16px;
+  margin-left: -11px;
+  margin-top: -8px;
+  border-radius: 50% 50% 45% 45%;
+  background: radial-gradient(ellipse at 50% 30%, #b8e878 0%, #78b848 100%);
+  box-shadow: inset 0 -2px 0 rgb(0 0 0 / 8%);
+}
+
 .game-tiles {
   position: absolute;
   inset: 0;
+  z-index: 3;
+  pointer-events: none;
+  opacity: 0.4;
+  mix-blend-mode: soft-light;
   background-image:
-    linear-gradient(90deg, rgb(255 255 255 / 8%) 1px, transparent 1px),
-    linear-gradient(0deg, rgb(255 255 255 / 8%) 1px, transparent 1px),
-    radial-gradient(circle at 15% 20%, rgb(255 255 255 / 24%) 0 20px, transparent 22px),
-    radial-gradient(circle at 70% 68%, rgb(255 255 255 / 18%) 0 16px, transparent 18px);
-  background-size: 32px 32px, 32px 32px, auto, auto;
+    radial-gradient(circle 1.2px at 12% 18%, rgb(255 255 255 / 0.5) 50%, transparent 52%),
+    radial-gradient(circle 1px at 40% 55%, rgb(255 255 255 / 0.35) 50%, transparent 52%),
+    radial-gradient(circle 1.2px at 78% 32%, rgb(255 255 255 / 0.4) 50%, transparent 52%),
+    radial-gradient(circle 1px at 88% 78%, rgb(255 255 255 / 0.3) 50%, transparent 52%);
+  background-size:
+    48px 48px,
+    56px 56px,
+    44px 44px,
+    52px 52px;
 }
 
 .map-obstacle {
   position: absolute;
-  border-radius: 10px;
-  border: 2px solid #87a468;
+  border-radius: 42% 58% 48% 52% / 48% 42% 58% 52%;
+  border: 2px solid #6aa848;
   background:
-    linear-gradient(180deg, #b0cd7f 0%, #8bb75d 100%);
-  box-shadow: inset 0 0 0 2px rgb(255 255 255 / 20%);
-  z-index: 1;
+    radial-gradient(ellipse 80% 70% at 40% 35%, #d8f8a8 0%, #98d860 45%, #78b848 100%);
+  box-shadow:
+    inset 0 3px 6px rgb(255 255 255 / 35%),
+    0 3px 0 rgb(80 130 50 / 25%);
+  z-index: 4;
 }
 
 .player-sprite,
@@ -683,7 +1021,7 @@ select {
   height: 32px;
   display: grid;
   place-items: center;
-  z-index: 3;
+  z-index: 6;
 }
 
 .game-world .player-sprite {
@@ -855,9 +1193,11 @@ select {
 }
 
 .ac-villager-tile__portrait {
-  width: 48px;
-  height: 48px;
-  border-radius: 12px;
+  /* 32×32 = 시트에서 한 프레임(ENTITY_SIZE)과 같아야 배경 위치(32px 단위)와 맞음 */
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  overflow: hidden;
   background-color: rgb(255 255 255 / 55%);
   background-repeat: no-repeat;
   background-size: 96px 128px;
@@ -1148,4 +1488,195 @@ select {
   text-align: center;
   max-width: 320px;
   line-height: 1.35;
+}
+
+/* —— 홈(/) 입장: 게임 시작 버튼 —— */
+.home-entry-card::before,
+.home-entry-card::after {
+  display: none;
+}
+
+.home-entry-card {
+  max-width: 560px;
+  margin-left: auto;
+  margin-right: auto;
+  font-family: Nunito, "Noto Sans KR", system-ui, sans-serif;
+  border-color: #c8e6a8;
+  box-shadow: 0 8px 0 #b8d98a;
+  background: linear-gradient(180deg, #fefff5 0%, #f2ffe8 50%, #fffdf5 100%);
+  text-align: center;
+  padding: 28px 22px 26px;
+}
+
+.home-ac-title {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+  margin: 0 0 8px;
+}
+
+.home-ac-title__tile {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 56px;
+  min-height: 56px;
+  padding: 6px 14px;
+  border-radius: 16px;
+  font-weight: 900;
+  font-size: 1.75rem;
+  color: #fff;
+  text-shadow:
+    0 2px 0 rgb(0 0 0 / 22%),
+    0 0 1px rgb(0 0 0 / 35%);
+  box-shadow:
+    0 4px 0 rgb(0 0 0 / 12%),
+    inset 0 -3px 0 rgb(255 255 255 / 22%);
+}
+
+.home-ac-title__tile--pink {
+  background: linear-gradient(180deg, #ff9ec4 0%, #ff7eb0 100%);
+}
+
+.home-ac-title__tile--blue {
+  background: linear-gradient(180deg, #8ed4ff 0%, #5abfff 100%);
+}
+
+.home-ac-title__tile--mint {
+  background: linear-gradient(180deg, #9fe8b8 0%, #6dd58f 100%);
+}
+
+.home-entry-tagline {
+  margin: 0 0 14px;
+  font-size: 1rem;
+  font-weight: 800;
+  color: #4a6a32;
+}
+
+.home-entry-lead {
+  margin: 0 auto 20px;
+  max-width: 420px;
+  font-size: 0.95rem;
+  line-height: 1.55;
+  color: #4d5a38;
+  text-align: center;
+}
+
+.home-char-strip {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  margin-bottom: 26px;
+  flex-wrap: wrap;
+}
+
+.home-char-tile {
+  width: 64px;
+  height: 64px;
+  border-radius: 18px;
+  display: grid;
+  place-items: center;
+  font-size: 2rem;
+  box-shadow: 0 5px 0 rgb(0 0 0 / 12%);
+}
+
+.home-char-tile--a {
+  background: linear-gradient(180deg, #ffd6e8 0%, #ffb8dc 100%);
+}
+
+.home-char-tile--b {
+  background: linear-gradient(180deg, #c8ecff 0%, #a8dcff 100%);
+}
+
+.home-char-tile--c {
+  background: linear-gradient(180deg, #ffecc2 0%, #ffd78a 100%);
+}
+
+.home-char-tile--d {
+  background: linear-gradient(180deg, #d4f5c8 0%, #b8e8a8 100%);
+}
+
+.home-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+
+.home-start-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  text-decoration: none;
+  cursor: pointer;
+  padding: 16px 28px 16px 22px;
+  border-radius: 999px;
+  border: 3px solid #5a9c3a;
+  background: linear-gradient(180deg, #b8f070 0%, #8fd83a 45%, #7bc82e 100%);
+  box-shadow:
+    0 6px 0 #5a9a28,
+    inset 0 2px 0 rgb(255 255 255 / 45%);
+  font-family: inherit;
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+
+.home-start-btn:hover {
+  transform: translateY(-2px);
+  box-shadow:
+    0 8px 0 #5a9a28,
+    inset 0 2px 0 rgb(255 255 255 / 45%);
+}
+
+.home-start-btn:active {
+  transform: translateY(3px);
+  box-shadow:
+    0 3px 0 #5a9a28,
+    inset 0 2px 0 rgb(255 255 255 / 35%);
+}
+
+.home-start-btn__key {
+  flex-shrink: 0;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: #fff;
+  color: #3a7a18;
+  font-size: 1.1rem;
+  font-weight: 900;
+  box-shadow:
+    0 3px 0 rgb(0 0 0 / 12%),
+    inset 0 -2px 0 rgb(0 0 0 / 5%);
+  padding-left: 3px;
+}
+
+.home-start-btn__label {
+  font-size: 1.35rem;
+  font-weight: 900;
+  color: #fff;
+  letter-spacing: -0.03em;
+  text-shadow:
+    0 2px 0 #3d6e1a,
+    0 0 1px #2d5010;
+}
+
+.home-admin-btn {
+  text-decoration: none;
+  font-size: 0.92rem;
+  font-weight: 800;
+  color: #5f6d42;
+  padding: 10px 20px;
+  border-radius: 999px;
+  border: 2px solid #c5dfa8;
+  background: rgb(255 255 255 / 75%);
+  box-shadow: 0 3px 0 #d4e8b8;
+  transition: background 0.15s ease, transform 0.12s ease;
+}
+
+.home-admin-btn:hover {
+  background: #fff;
+  transform: translateY(-1px);
 }
