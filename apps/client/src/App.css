@@ -1,7 +1,7 @@
 .app-shell {
   max-width: 1240px;
   margin: 0 auto;
-  min-height: 100vh;
+  min-height: 100dvh;
   padding: 24px;
   display: flex;
   flex-direction: column;
@@ -35,9 +35,16 @@
 }
 
 .app-shell-body--default {
-  flex: 1 0 auto;
+  flex: 1;
   min-height: 0;
   overflow: visible;
+}
+
+.app-shell-body > .app-routes-root {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .app-site-footer {
@@ -159,12 +166,23 @@
   gap: 8px;
 }
 
+.student-game-card--with-ranking {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 272px;
+  gap: 10px;
+  align-items: start;
+}
+
 .student-play-viewport {
   flex: 0 1 auto;
   min-height: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
+}
+
+.student-game-card--with-ranking .student-play-viewport {
+  min-width: 0;
 }
 
 .student-page-layout .student-play-viewport > .game-section-wrap {
@@ -177,8 +195,31 @@
 .student-page-layout .student-game-card--with-ranking .live-ranking-panel--dock {
   width: 100%;
   flex-shrink: 0;
-  margin-top: 4px;
+  margin-top: 0;
   box-sizing: border-box;
+  position: sticky;
+  top: 8px;
+  align-self: start;
+  max-height: min(72dvh, calc(100dvh - 180px));
+  overflow-y: auto;
+}
+
+@media (max-width: 960px) {
+  .student-game-card--with-ranking {
+    grid-template-columns: minmax(0, 1fr) 220px;
+  }
+}
+
+@media (max-width: 780px) {
+  .student-game-card--with-ranking {
+    grid-template-columns: 1fr;
+  }
+
+  .student-page-layout .student-game-card--with-ranking .live-ranking-panel--dock {
+    position: relative;
+    top: 0;
+    max-height: none;
+  }
 }
 
 .student-page-layout .forest-hub-card {
@@ -225,8 +266,7 @@
   font-size: 0.62rem;
 }
 
-.student-page-layout .game-world--preview,
-.student-page-layout .game-world--solo {
+.student-page-layout .game-world--preview {
   width: 100%;
   max-width: none;
   margin-top: 4px;
@@ -236,17 +276,25 @@
   min-height: 180px;
 }
 
+/* 입장 후: 논리 640×320 유지, 남는 가로폭에 맞춰 확대(옆 빈 칸 없음). 아래쪽 .game-world--solo보다 구체적으로 둠 */
+.student-page-layout .student-page-col--play .game-world.game-world--solo {
+  width: 640px;
+  height: 320px;
+  max-width: none;
+  margin: 4px auto 0;
+  transform-origin: top center;
+  transform: scale(clamp(0.95, calc((100vw - min(34vw, 380px) - 56px) / 640), 1.88));
+}
+
+@media (max-width: 960px) {
+  .student-page-layout .student-page-col--play .game-world.game-world--solo {
+    transform: scale(clamp(0.88, calc((100vw - 28px) / 640), 1.55));
+  }
+}
+
 .student-page-layout .party-game-scale--solo {
   min-height: 0;
-  max-height: min(52dvh, calc(100dvh - 200px));
-}
-
-.student-page-layout .game-world--solo {
-  transform: scale(clamp(0.88, 1.02, 1.22));
-}
-
-.student-page-layout .game-world--party-slot {
-  transform: scale(0.78);
+  max-height: min(62dvh, calc(100dvh - 160px));
 }
 
 .student-page-layout .party-layout--split .party-game-scale {
@@ -1008,6 +1056,50 @@ select {
   line-height: 1.35;
 }
 
+.party-roster {
+  margin: 0 0 10px;
+  padding: 8px 10px;
+  border-radius: 14px;
+  border: 1px solid #cfe8a8;
+  background: rgb(255 255 255 / 72%);
+}
+
+.party-roster-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+}
+
+.party-roster-label {
+  flex-shrink: 0;
+  font-weight: 800;
+  font-size: 11px;
+  color: #35531e;
+}
+
+.party-roster-chip {
+  font-size: 12px;
+  font-weight: 700;
+  color: #4a5035;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #eef6d8;
+  border: 1px solid #d0e4b0;
+}
+
+.party-roster-chip--me {
+  background: #dff6c8;
+  border-color: #9bc45e;
+}
+
+.party-roster-hint {
+  margin: 8px 0 0;
+  font-size: 11px;
+  color: #6d7a5a;
+  line-height: 1.45;
+}
+
 /* 동숲 느낌: 하늘·언덕·강·해변·풀 (레이어 순서 주의 — 아래가 먼저 그려짐) */
 .game-map-backdrop {
   position: absolute;
@@ -1193,6 +1285,19 @@ select {
   border-radius: 14px;
   border: 1px solid #e0ccff;
   background: #fffaf0;
+}
+
+.battle-dialog .battle-achievement {
+  margin: 0 0 8px;
+  font-size: 0.85rem;
+  color: #5a4a7a;
+}
+
+.battle-dialog .battle-situation {
+  margin: 0 0 10px;
+  font-size: 0.92rem;
+  color: #444;
+  line-height: 1.45;
 }
 
 @keyframes float-monster {
@@ -1626,15 +1731,29 @@ select {
 }
 
 /* —— 홈(/) 입장: 게임 시작 버튼 —— */
+.home-entry-shell {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+
 .home-entry-card::before,
 .home-entry-card::after {
   display: none;
 }
 
 .home-entry-card {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
   max-width: 560px;
+  width: 100%;
   margin-left: auto;
   margin-right: auto;
+  margin-bottom: 0;
   font-family: Nunito, "Noto Sans KR", system-ui, sans-serif;
   border-color: #c8e6a8;
   box-shadow: 0 8px 0 #b8d98a;
@@ -1737,6 +1856,8 @@ select {
   flex-direction: column;
   align-items: center;
   gap: 14px;
+  margin-top: auto;
+  padding-top: 8px;
 }
 
 .home-start-btn {

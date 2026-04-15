@@ -1,7 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import type { User } from "firebase/auth";
 import GroupStatusCard from "../components/admin/GroupStatusCard";
-import { ACHIEVEMENT_COLORS } from "../config/achievement";
+import {
+  ACHIEVEMENT_COLORS,
+  ACHIEVEMENT_DESCRIPTIONS,
+  ACHIEVEMENT_TITLES,
+} from "../config/achievement";
 import type { ActivityLog, GroupStatus, StudentStatus } from "../types/game";
 import {
   observeAdminAuth,
@@ -11,6 +15,7 @@ import {
 import {
   createTeacherClassCode,
   ensureTeacherClassCode,
+  resetClassProgressAndActivity,
   subscribeActivityLogsByClassCode,
   subscribeStudentsByClassCode,
 } from "../services/classCode";
@@ -30,11 +35,36 @@ function eventLabel(type: string) {
   return EVENT_LABELS[type] ?? type;
 }
 
-function formatExtra(extra?: Record<string, unknown>) {
-  if (!extra) return "-";
-  const entries = Object.entries(extra);
-  if (entries.length === 0) return "-";
-  return entries.map(([k, v]) => `${k}: ${String(v)}`).join(", ");
+type LessonStat = {
+  lesson: number;
+  attempts: number;
+  correct: number;
+  accuracy: number;
+};
+
+function summarizeRubric(input: {
+  level: number;
+  recentAccuracy: number;
+  levelProgress: number;
+  wrongStreak: number;
+}) {
+  const { level, recentAccuracy, levelProgress, wrongStreak } = input;
+  if (recentAccuracy >= 90 && levelProgress >= 80) {
+    return "탁월: 현재 차시 목표를 안정적으로 해결하며 다음 난이도 준비가 된 상태";
+  }
+  if (recentAccuracy >= 75 && levelProgress >= 50) {
+    return "양호: 핵심 유형은 해결 가능하며 복합 문제에서 검산 습관을 더하면 좋음";
+  }
+  if (recentAccuracy >= 60) {
+    return "보통: 기본 계산은 가능하나 유형 전환(어림/나머지)에서 실수가 반복되는 상태";
+  }
+  if (wrongStreak >= 2) {
+    return "지원 필요: 연속 오답이 누적되어 기초 전략(식 세우기·검산) 재학습이 필요한 상태";
+  }
+  if (level <= 2) {
+    return "기초 형성: 곱셈 절차를 정확히 익히는 단계로, 속도보다 정확도 우선 지도가 필요";
+  }
+  return "성장 중: 단계별 연습을 통해 정확도와 속도를 함께 끌어올려야 하는 상태";
 }
 
 export default function AdminPage() {
@@ -46,6 +76,8 @@ export default function AdminPage() {
   const [selectedLogType, setSelectedLogType] = useState("ALL");
   const [selectedStudentId, setSelectedStudentId] = useState<string>("");
   const [adminGroupMsg, setAdminGroupMsg] = useState<string>("");
+  const [adminResetMsg, setAdminResetMsg] = useState<string>("");
+  const [isResettingClass, setIsResettingClass] = useState(false);
 
   useEffect(() => observeAdminAuth(setAdminUser), []);
 
@@ -102,6 +134,88 @@ export default function AdminPage() {
     if (!selectedStudentId) return [];
     return activityLogs.filter((log) => log.userId === selectedStudentId);
   }, [activityLogs, selectedStudentId]);
+
+  const selectedStudent = useMemo(
+    () => students.find((student) => student.id === selectedStudentId) ?? null,
+    [students, selectedStudentId],
+  );
+
+  const selectedStudentReport = useMemo(() => {
+    if (!selectedStudent) return null;
+    const battleLogs = selectedStudentLogs.filter(
+      (log) => log.type === "BATTLE_CORRECT" || log.type === "BATTLE_WRONG",
+    );
+    const correct = battleLogs.filter((log) => log.type === "BATTLE_CORRECT").length;
+    const wrong = battleLogs.length - correct;
+    const attempts = battleLogs.length;
+    const accuracy = attempts > 0 ? Math.round((correct / attempts) * 100) : 0;
+
+    const lessonMap = new Map<number, { attempts: number; correct: number }>();
+    const kindMap = new Map<string, { attempts: number; correct: number }>();
+    for (const log of battleLogs) {
+      const extra = log.extra ?? {};
+      const lesson = Number(extra.lesson ?? 0);
+      if (lesson >= 2 && lesson <= 7) {
+        const cur = lessonMap.get(lesson) ?? { attempts: 0, correct: 0 };
+        cur.attempts += 1;
+        if (log.type === "BATTLE_CORRECT") cur.correct += 1;
+        lessonMap.set(lesson, cur);
+      }
+
+      const kind = String(extra.questionKind ?? "computation");
+      const kcur = kindMap.get(kind) ?? { attempts: 0, correct: 0 };
+      kcur.attempts += 1;
+      if (log.type === "BATTLE_CORRECT") kcur.correct += 1;
+      kindMap.set(kind, kcur);
+    }
+
+    const lessonStats: LessonStat[] = [...lessonMap.entries()]
+      .map(([lesson, v]) => ({
+        lesson,
+        attempts: v.attempts,
+        correct: v.correct,
+        accuracy: v.attempts > 0 ? Math.round((v.correct / v.attempts) * 100) : 0,
+      }))
+      .sort((a, b) => a.lesson - b.lesson);
+
+    const meaningful = lessonStats.filter((s) => s.attempts >= 2);
+    const pool = meaningful.length > 0 ? meaningful : lessonStats;
+    const strengthLesson =
+      pool.length > 0
+        ? [...pool].sort((a, b) => b.accuracy - a.accuracy || b.attempts - a.attempts)[0]
+        : null;
+    const supportLesson =
+      pool.length > 0
+        ? [...pool].sort((a, b) => a.accuracy - b.accuracy || b.attempts - a.attempts)[0]
+        : null;
+
+    const kindStats = [...kindMap.entries()]
+      .map(([kind, v]) => ({
+        kind,
+        attempts: v.attempts,
+        accuracy: v.attempts > 0 ? Math.round((v.correct / v.attempts) * 100) : 0,
+      }))
+      .sort((a, b) => b.attempts - a.attempts);
+
+    const rubric = summarizeRubric({
+      level: selectedStudent.level,
+      recentAccuracy: selectedStudent.recentAccuracy,
+      levelProgress: selectedStudent.levelProgress,
+      wrongStreak: selectedStudent.wrongStreak,
+    });
+
+    return {
+      attempts,
+      correct,
+      wrong,
+      accuracy,
+      lessonStats,
+      strengthLesson,
+      supportLesson,
+      kindStats,
+      rubric,
+    };
+  }, [selectedStudent, selectedStudentLogs]);
 
   const handleGoogleSignIn = async () => {
     try {
@@ -162,6 +276,40 @@ export default function AdminPage() {
 
       <section className="page-card">
         <h3>학생 성취수준</h3>
+        <p>레벨을 기준으로 계산 숙련도를 해석해 보여줍니다. 필요한 경우 반 전체 학습 상태를 초기화할 수 있습니다.</p>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
+          <button
+            type="button"
+            disabled={!classCode || isResettingClass}
+            onClick={async () => {
+              if (!classCode) {
+                setAdminResetMsg("반코드를 불러온 뒤 다시 시도해 주세요.");
+                return;
+              }
+              const ok = window.confirm(
+                "이 반의 활동로그와 학생 성취수준(레벨/정답률/아이템 등)을 모두 초기화할까요?",
+              );
+              if (!ok) return;
+              try {
+                setIsResettingClass(true);
+                setAdminResetMsg("");
+                const result = await resetClassProgressAndActivity(classCode);
+                setAdminResetMsg(
+                  `초기화 완료: 학생 ${result.resetStudents}명, 활동로그 ${result.removedLogs}건`,
+                );
+              } catch (error) {
+                setAdminResetMsg(
+                  error instanceof Error ? error.message : "초기화 처리 중 오류가 발생했습니다.",
+                );
+              } finally {
+                setIsResettingClass(false);
+              }
+            }}
+          >
+            {isResettingClass ? "초기화 처리 중..." : "이 반 활동로그 + 성취수준 초기화"}
+          </button>
+        </div>
+        {adminResetMsg ? <p>{adminResetMsg}</p> : null}
         <p>모둠에 참가 중인 학생을 반에서 제외하면 RTDB가 갱신되고, 학생 화면에서도 모둠 참가가 해제됩니다.</p>
         {adminGroupMsg ? <p>{adminGroupMsg}</p> : null}
         <table className="student-table">
@@ -198,9 +346,13 @@ export default function AdminPage() {
                     style={{
                       backgroundColor: ACHIEVEMENT_COLORS[student.achievement],
                     }}
+                    title={ACHIEVEMENT_DESCRIPTIONS[student.achievement]}
                   >
-                    {student.achievement}
+                    {ACHIEVEMENT_TITLES[student.achievement]}
                   </span>
+                  <div style={{ marginTop: 4, fontSize: "0.82rem", color: "#4b5563", lineHeight: 1.35 }}>
+                    {ACHIEVEMENT_DESCRIPTIONS[student.achievement]}
+                  </div>
                 </td>
                 <td>{student.levelProgress}%</td>
                 <td>{student.recentAccuracy}%</td>
@@ -305,32 +457,91 @@ export default function AdminPage() {
         )}
       </section>
       <section className="page-card">
-        <h3>학생 상세 타임라인</h3>
-        {!selectedStudentId ? (
-          <p>학생 목록에서 '보기'를 눌러 상세 타임라인을 확인하세요.</p>
-        ) : selectedStudentLogs.length === 0 ? (
-          <p>선택한 학생의 활동 로그가 없습니다.</p>
+        <h3>학생 상세 학습 리포트</h3>
+        {!selectedStudent ? (
+          <p>학생 목록에서 '보기'를 누르면 풀이량·레벨·정답률·강점/보완점을 바로 보여줍니다.</p>
+        ) : !selectedStudentReport ? (
+          <p>선택한 학생의 학습 데이터를 불러올 수 없습니다.</p>
         ) : (
-          <table className="student-table">
-            <thead>
-              <tr>
-                <th>시간</th>
-                <th>이벤트</th>
-                <th>모둠</th>
-                <th>추가 정보</th>
-              </tr>
-            </thead>
-            <tbody>
-              {selectedStudentLogs.map((log) => (
-                <tr key={`${log.id}-detail`}>
-                  <td>{new Date(log.at).toLocaleTimeString()}</td>
-                  <td>{eventLabel(log.type)}</td>
-                  <td>{log.groupId}모둠</td>
-                  <td>{formatExtra(log.extra)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <>
+            <p>
+              <strong>{selectedStudent.name}</strong> · 현재 레벨 {selectedStudent.level} (차시{" "}
+              {selectedStudent.level + 1}) · 최근 정답률 {selectedStudent.recentAccuracy}% · 성취율{" "}
+              {selectedStudent.levelProgress}%
+            </p>
+            <p>
+              총 풀이 <strong>{selectedStudentReport.attempts}</strong>문항 (정답{" "}
+              {selectedStudentReport.correct} / 오답 {selectedStudentReport.wrong}) · 로그기준 정답률{" "}
+              {selectedStudentReport.accuracy}%
+            </p>
+            <p>
+              <strong>평가 루브릭:</strong> {selectedStudentReport.rubric}
+            </p>
+            <p>
+              <strong>강점 영역:</strong>{" "}
+              {selectedStudentReport.strengthLesson
+                ? `${selectedStudentReport.strengthLesson.lesson}차시 (정답률 ${selectedStudentReport.strengthLesson.accuracy}%, ${selectedStudentReport.strengthLesson.attempts}문항)`
+                : "아직 분석할 풀이 데이터가 부족합니다."}
+            </p>
+            <p>
+              <strong>보완 필요 영역:</strong>{" "}
+              {selectedStudentReport.supportLesson
+                ? `${selectedStudentReport.supportLesson.lesson}차시 (정답률 ${selectedStudentReport.supportLesson.accuracy}%, ${selectedStudentReport.supportLesson.attempts}문항)`
+                : "아직 분석할 풀이 데이터가 부족합니다."}
+            </p>
+
+            {selectedStudentReport.lessonStats.length > 0 ? (
+              <table className="student-table" style={{ marginTop: 10 }}>
+                <thead>
+                  <tr>
+                    <th>차시</th>
+                    <th>풀이 문항 수</th>
+                    <th>정답 수</th>
+                    <th>정답률</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {selectedStudentReport.lessonStats.map((row) => (
+                    <tr key={`lesson-${row.lesson}`}>
+                      <td>{row.lesson}차시</td>
+                      <td>{row.attempts}</td>
+                      <td>{row.correct}</td>
+                      <td>{row.accuracy}%</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : null}
+
+            {selectedStudentReport.kindStats.length > 0 ? (
+              <table className="student-table" style={{ marginTop: 10 }}>
+                <thead>
+                  <tr>
+                    <th>문항 유형</th>
+                    <th>풀이 수</th>
+                    <th>정답률</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {selectedStudentReport.kindStats.map((row) => (
+                    <tr key={`kind-${row.kind}`}>
+                      <td>
+                        {row.kind === "computation"
+                          ? "계산형"
+                          : row.kind === "estimate"
+                            ? "어림형"
+                            : row.kind === "principle"
+                              ? "원리형"
+                              : row.kind}
+                      </td>
+                      <td>{row.attempts}</td>
+                      <td>{row.accuracy}%</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : null}
+          </>
         )}
       </section>
     </>

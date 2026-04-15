@@ -4,6 +4,7 @@ import {
   ref,
   runTransaction,
   update,
+  remove,
   type Unsubscribe,
 } from "firebase/database";
 import { getAchievementByLevel } from "../config/achievement";
@@ -250,4 +251,54 @@ export function subscribeActivityLogsByClassCode(
     merged.sort((a, b) => b.at - a.at);
     callback(merged.slice(0, 50));
   });
+}
+
+/** 관리자용: 반 활동로그 + 학생 성취수준(학습 상태) 초기화 */
+export async function resetClassProgressAndActivity(classCode: string): Promise<{
+  resetStudents: number;
+  removedLogs: number;
+}> {
+  if (!isValidClassCode(classCode)) {
+    throw new Error("유효한 반코드가 아닙니다.");
+  }
+
+  const studentsSnap = await get(ref(realtimeDb, "students"));
+  const studentsRaw = (studentsSnap.val() ?? {}) as Record<string, any>;
+  const updates: Record<string, unknown> = {};
+  let resetStudents = 0;
+  for (const [userId, value] of Object.entries(studentsRaw)) {
+    if (String(value?.classCode ?? "") !== classCode) continue;
+    resetStudents += 1;
+    const base = `students/${userId}`;
+    updates[`${base}/level`] = 1;
+    updates[`${base}/levelProgress`] = 0;
+    updates[`${base}/recentAccuracy`] = 0;
+    updates[`${base}/wrongStreak`] = 0;
+    updates[`${base}/hp`] = 100;
+    updates[`${base}/appearanceTier`] = 1;
+    updates[`${base}/earnedItems`] = [];
+    updates[`${base}/updatedAt`] = Date.now();
+  }
+
+  if (Object.keys(updates).length > 0) {
+    await update(ref(realtimeDb), updates);
+  }
+
+  const logsSnap = await get(ref(realtimeDb, "activityLogs"));
+  const logsRaw = (logsSnap.val() ?? {}) as Record<string, Record<string, any>>;
+  const removals: Promise<void>[] = [];
+  let removedLogs = 0;
+  for (const gid of ["1", "2", "3", "4", "5"]) {
+    const groupLogs = logsRaw[gid] ?? {};
+    for (const [logId, logValue] of Object.entries(groupLogs)) {
+      if (String(logValue?.classCode ?? "") !== classCode) continue;
+      removedLogs += 1;
+      removals.push(remove(ref(realtimeDb, `activityLogs/${gid}/${logId}`)));
+    }
+  }
+  if (removals.length > 0) {
+    await Promise.all(removals);
+  }
+
+  return { resetStudents, removedLogs };
 }
