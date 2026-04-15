@@ -8,12 +8,14 @@ import StudentPage from "./pages/StudentPage";
 function App() {
   return (
     <AppShell>
-      <Routes>
-        <Route path="/" element={<HomePage />} />
-        <Route path="/student" element={<StudentPage />} />
-        <Route path="/admin" element={<AdminPage />} />
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
+      <div className="app-routes-root">
+        <Routes>
+          <Route path="/" element={<HomePage />} />
+          <Route path="/student" element={<StudentPage />} />
+          <Route path="/admin" element={<AdminPage />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </div>
     </AppShell>
   );
 }

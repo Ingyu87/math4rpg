@@ -20,6 +20,12 @@ import {
   subscribeStudentsByClassCode,
 } from "../services/classCode";
 import { adminRemoveStudentFromGroup } from "../services/groupSession";
+import {
+  generateAiStudentReport,
+  generateAiGroupAnalysis,
+  type AiGroupAnalysis,
+  type AiStudentReport,
+} from "../services/aiCoach";
 
 type LessonStat = {
   lesson: number;
@@ -63,6 +69,12 @@ export default function AdminPage() {
   const [adminGroupMsg, setAdminGroupMsg] = useState<string>("");
   const [adminResetMsg, setAdminResetMsg] = useState<string>("");
   const [isResettingClass, setIsResettingClass] = useState(false);
+  const [aiReport, setAiReport] = useState<AiStudentReport | null>(null);
+  const [aiReportError, setAiReportError] = useState("");
+  const [aiReportLoading, setAiReportLoading] = useState(false);
+  const [aiGroupReport, setAiGroupReport] = useState<AiGroupAnalysis | null>(null);
+  const [aiGroupError, setAiGroupError] = useState("");
+  const [aiGroupLoading, setAiGroupLoading] = useState(false);
 
   useEffect(() => observeAdminAuth(setAdminUser), []);
 
@@ -110,6 +122,18 @@ export default function AdminPage() {
     return byGroup;
   }, [students]);
 
+  const groupStatsForAi = useMemo(
+    () =>
+      groups.map((g) => ({
+        groupId: g.groupId,
+        onlineCount: g.onlineCount,
+        avgLevel: g.avgLevel,
+        avgAccuracy: g.avgAccuracy,
+        studentCount: students.filter((s) => s.groupId === g.groupId).length,
+      })),
+    [groups, students],
+  );
+
   const selectedStudentLogs = useMemo(() => {
     if (!selectedStudentId) return [];
     return activityLogs.filter((log) => log.userId === selectedStudentId);
@@ -119,6 +143,11 @@ export default function AdminPage() {
     () => students.find((student) => student.id === selectedStudentId) ?? null,
     [students, selectedStudentId],
   );
+
+  useEffect(() => {
+    setAiReport(null);
+    setAiReportError("");
+  }, [selectedStudentId]);
 
   const selectedStudentReport = useMemo(() => {
     if (!selectedStudent) return null;
@@ -247,6 +276,71 @@ export default function AdminPage() {
 
       <section className="page-card">
         <h3>모둠 현황</h3>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
+          <button
+            type="button"
+            disabled={aiGroupLoading || !classCode}
+            onClick={async () => {
+              if (!classCode) return;
+              try {
+                setAiGroupLoading(true);
+                setAiGroupError("");
+                const report = await generateAiGroupAnalysis({
+                  classCode,
+                  groups: groupStatsForAi,
+                });
+                setAiGroupReport(report);
+              } catch (error) {
+                setAiGroupError(
+                  error instanceof Error ? error.message : "모둠 AI 분석 생성에 실패했습니다.",
+                );
+              } finally {
+                setAiGroupLoading(false);
+              }
+            }}
+          >
+            {aiGroupLoading ? "AI 모둠 분석 생성 중..." : "모둠 현황 AI 분석"}
+          </button>
+          {aiGroupReport ? <span style={{ color: "#35531e" }}>AI 분석 완료</span> : null}
+        </div>
+        {aiGroupError ? <p style={{ color: "#b91c1c" }}>{aiGroupError}</p> : null}
+        {aiGroupReport ? (
+          <div style={{ marginBottom: 10 }}>
+            <p>
+              <strong>AI 요약:</strong> {aiGroupReport.summary}
+            </p>
+            {aiGroupReport.groupInsights.map((item) => (
+              <div
+                key={`ai-group-${item.groupId}`}
+                style={{
+                  border: "1px solid #dce8c8",
+                  borderRadius: 10,
+                  padding: "8px 10px",
+                  marginBottom: 8,
+                  background: "rgba(255,255,255,0.6)",
+                }}
+              >
+                <p style={{ margin: 0 }}>
+                  <strong>{item.groupId}모둠</strong> · 상태: {item.status}
+                </p>
+                <p style={{ margin: "4px 0 0" }}>
+                  <strong>강점:</strong> {item.strengths.join(" / ")}
+                </p>
+                <p style={{ margin: "4px 0 0" }}>
+                  <strong>위험요인:</strong> {item.risks.join(" / ")}
+                </p>
+                <p style={{ margin: "4px 0 0" }}>
+                  <strong>권장 조치:</strong> {item.actions.join(" / ")}
+                </p>
+              </div>
+            ))}
+            {aiGroupReport.classActions.length > 0 ? (
+              <p>
+                <strong>반 전체 조치:</strong> {aiGroupReport.classActions.join(" / ")}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
         <div className="group-grid">
           {groups.map((group) => (
             <GroupStatusCard key={group.groupId} group={group} />
@@ -275,7 +369,7 @@ export default function AdminPage() {
                 setAdminResetMsg("");
                 const result = await resetClassProgressAndActivity(classCode);
                 setAdminResetMsg(
-                  `초기화 완료: 학생 ${result.resetStudents}명, 활동로그 ${result.removedLogs}건`,
+                  `초기화 완료: 학생 ${result.removedStudents}명 삭제, 활동로그 ${result.removedLogs}건 삭제`,
                 );
               } catch (error) {
                 setAdminResetMsg(
@@ -395,6 +489,40 @@ export default function AdminPage() {
           <p>선택한 학생의 학습 데이터를 불러올 수 없습니다.</p>
         ) : (
           <>
+            <div style={{ display: "flex", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
+              <button
+                type="button"
+                disabled={aiReportLoading}
+                onClick={async () => {
+                  try {
+                    setAiReportLoading(true);
+                    setAiReportError("");
+                    const report = await generateAiStudentReport({
+                      studentName: selectedStudent.name,
+                      level: selectedStudent.level,
+                      levelProgress: selectedStudent.levelProgress,
+                      recentAccuracy: selectedStudent.recentAccuracy,
+                      attempts: selectedStudentReport.attempts,
+                      correct: selectedStudentReport.correct,
+                      wrong: selectedStudentReport.wrong,
+                      lessonStats: selectedStudentReport.lessonStats,
+                      kindStats: selectedStudentReport.kindStats,
+                    });
+                    setAiReport(report);
+                  } catch (error) {
+                    setAiReportError(
+                      error instanceof Error ? error.message : "AI 리포트 생성에 실패했습니다.",
+                    );
+                  } finally {
+                    setAiReportLoading(false);
+                  }
+                }}
+              >
+                {aiReportLoading ? "AI 분석 생성 중..." : "AI 리포트 생성"}
+              </button>
+              {aiReport ? <span style={{ color: "#35531e" }}>AI 분석 반영됨</span> : null}
+            </div>
+            {aiReportError ? <p style={{ color: "#b91c1c" }}>{aiReportError}</p> : null}
             <p>
               <strong>{selectedStudent.name}</strong> · 현재 레벨 {selectedStudent.level} (차시{" "}
               {selectedStudent.level + 1}) · 최근 정답률 {selectedStudent.recentAccuracy}% · 성취율{" "}
@@ -406,20 +534,44 @@ export default function AdminPage() {
               {selectedStudentReport.accuracy}%
             </p>
             <p>
-              <strong>평가 루브릭:</strong> {selectedStudentReport.rubric}
+              <strong>평가 루브릭:</strong> {aiReport?.rubricNote ?? selectedStudentReport.rubric}
             </p>
             <p>
               <strong>강점 영역:</strong>{" "}
-              {selectedStudentReport.strengthLesson
+              {aiReport?.strengths?.length
+                ? aiReport.strengths.join(" / ")
+                : selectedStudentReport.strengthLesson
                 ? `${selectedStudentReport.strengthLesson.lesson}차시 (정답률 ${selectedStudentReport.strengthLesson.accuracy}%, ${selectedStudentReport.strengthLesson.attempts}문항)`
                 : "아직 분석할 풀이 데이터가 부족합니다."}
             </p>
             <p>
               <strong>보완 필요 영역:</strong>{" "}
-              {selectedStudentReport.supportLesson
+              {aiReport?.weaknesses?.length
+                ? aiReport.weaknesses.join(" / ")
+                : selectedStudentReport.supportLesson
                 ? `${selectedStudentReport.supportLesson.lesson}차시 (정답률 ${selectedStudentReport.supportLesson.accuracy}%, ${selectedStudentReport.supportLesson.attempts}문항)`
                 : "아직 분석할 풀이 데이터가 부족합니다."}
             </p>
+            {aiReport?.summary ? (
+              <p>
+                <strong>AI 종합 의견:</strong> {aiReport.summary}
+              </p>
+            ) : null}
+            {aiReport?.actionPlan?.length ? (
+              <div>
+                <strong>AI 권장 지도안</strong>
+                <ul>
+                  {aiReport.actionPlan.map((item) => (
+                    <li key={item}>{item}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+            {aiReport?.teacherComment ? (
+              <p>
+                <strong>교사 코멘트:</strong> {aiReport.teacherComment}
+              </p>
+            ) : null}
 
             {selectedStudentReport.lessonStats.length > 0 ? (
               <table className="student-table" style={{ marginTop: 10 }}>

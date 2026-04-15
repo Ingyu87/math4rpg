@@ -28,6 +28,7 @@ import {
   normalizeAnswer,
   pickRandomQuestion,
 } from "../services/battleQuestions";
+import { generateAiFinalReport, type AiFinalReport } from "../services/aiCoach";
 
 type LevelStats = {
   correct: number;
@@ -166,7 +167,8 @@ function randomItem() {
   return ITEM_POOL[Math.floor(Math.random() * ITEM_POOL.length)];
 }
 
-const ITEM_DROP_CHANCE = 0.45;
+const ITEM_DROP_CHANCE = 0.1;
+const MAX_ITEMS_PER_LEVEL = 3;
 
 function shouldDropItem() {
   return Math.random() < ITEM_DROP_CHANCE;
@@ -261,6 +263,14 @@ export default function StudentPage() {
   const [totalCorrect, setTotalCorrect] = useState(0);
   const [elapsedSec, setElapsedSec] = useState(0);
   const [earnedItems, setEarnedItems] = useState<string[]>([]);
+  const [levelItemDrops, setLevelItemDrops] = useState<Record<number, number>>({
+    1: 0,
+    2: 0,
+    3: 0,
+    4: 0,
+    5: 0,
+    6: 0,
+  });
   const [appearanceTier, setAppearanceTier] = useState(1);
   const [levelStats, setLevelStats] = useState<Record<number, LevelStats>>({
     1: { correct: 0, wrong: 0 },
@@ -273,6 +283,9 @@ export default function StudentPage() {
   const [toasts, setToasts] = useState<
     Array<{ id: string; message: string; tone: "success" | "info" | "warning" }>
   >([]);
+  const [aiFinalReport, setAiFinalReport] = useState<AiFinalReport | null>(null);
+  const [aiFinalLoading, setAiFinalLoading] = useState(false);
+  const [aiFinalError, setAiFinalError] = useState("");
 
   const [playerPos, setPlayerPos] = useState({ x: 90, y: 120 });
   const [playerFacing, setPlayerFacing] = useState<Facing>("down");
@@ -627,19 +640,31 @@ export default function StudentPage() {
       setLevelCorrectCount(nextCorrect);
       setTotalCorrect(nextTotalCorrect);
       setWrongStreak(0);
-      const droppedItem = shouldDropItem() ? randomItem() : null;
+      const levelDropCount = levelItemDrops[playerLevel] ?? 0;
+      const canDropByLevel = levelDropCount < MAX_ITEMS_PER_LEVEL;
+      const droppedItem = canDropByLevel && shouldDropItem() ? randomItem() : null;
       if (droppedItem) {
         setEarnedItems((prev) => [...prev, droppedItem]);
+        setLevelItemDrops((prev) => ({
+          ...prev,
+          [playerLevel]: (prev[playerLevel] ?? 0) + 1,
+        }));
       }
       const nextTier = Math.min(6, Math.floor(nextTotalCorrect / 5) + 1);
       setAppearanceTier(nextTier);
       setBattleFeedback(
         droppedItem
           ? `정답! 몬스터 처치 성공 (+${droppedItem}) / ${currentQuestion.explanation}`
-          : `정답! 몬스터 처치 성공 (이번에는 아이템 없음) / ${currentQuestion.explanation}`,
+          : canDropByLevel
+            ? `정답! 몬스터 처치 성공 (이번에는 아이템 없음) / ${currentQuestion.explanation}`
+            : `정답! 몬스터 처치 성공 (이 레벨 아이템은 최대 ${MAX_ITEMS_PER_LEVEL}개 획득 완료) / ${currentQuestion.explanation}`,
       );
       pushToast(
-        droppedItem ? `정답! ${droppedItem} 획득` : "정답! 이번에는 아이템이 드랍되지 않았어요.",
+        droppedItem
+          ? `정답! ${droppedItem} 획득`
+          : canDropByLevel
+            ? "정답! 이번에는 아이템이 드랍되지 않았어요."
+            : `정답! 이 레벨 아이템은 최대 ${MAX_ITEMS_PER_LEVEL}개까지 획득할 수 있어요.`,
         "success",
       );
       {
@@ -1073,6 +1098,73 @@ export default function StudentPage() {
           <p>
             총 풀이 {totalAttempts} / 정답 {totalCorrect} / 오답 {totalWrong} · {formatDuration(elapsedSec)}
           </p>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
+            <button
+              type="button"
+              disabled={aiFinalLoading}
+              onClick={async () => {
+                try {
+                  setAiFinalLoading(true);
+                  setAiFinalError("");
+                  const report = await generateAiFinalReport({
+                    studentName: nickname.trim() || "학생",
+                    level: playerLevel,
+                    elapsedSec,
+                    totalAttempts,
+                    totalCorrect,
+                    totalWrong,
+                    accuracy: recentAccuracy,
+                    earnedItems,
+                    levelStats: Object.fromEntries(
+                      Object.entries(levelStats).map(([k, v]) => [k, { correct: v.correct, wrong: v.wrong }]),
+                    ),
+                  });
+                  setAiFinalReport(report);
+                } catch (error) {
+                  setAiFinalError(
+                    error instanceof Error ? error.message : "AI 최종 보고서 생성에 실패했습니다.",
+                  );
+                } finally {
+                  setAiFinalLoading(false);
+                }
+              }}
+            >
+              {aiFinalLoading ? "AI 보고서 생성 중..." : "AI 최종 보고서 만들기"}
+            </button>
+          </div>
+          {aiFinalError ? <p style={{ color: "#b91c1c", marginTop: 8 }}>{aiFinalError}</p> : null}
+          {aiFinalReport ? (
+            <div style={{ marginTop: 10, borderTop: "1px solid #dde7c8", paddingTop: 10 }}>
+              <h4 style={{ margin: "0 0 6px" }}>{aiFinalReport.title}</h4>
+              <p>{aiFinalReport.overview}</p>
+              <p>
+                <strong>성장 포인트:</strong> {aiFinalReport.achievementHighlights.join(" / ")}
+              </p>
+              <p>
+                <strong>다음 목표:</strong> {aiFinalReport.nextGoals.join(" / ")}
+              </p>
+              <p>
+                <strong>가정 안내:</strong> {aiFinalReport.parentGuide}
+              </p>
+              <div style={{ marginTop: 10 }}>
+                <p style={{ margin: "0 0 6px" }}>
+                  <strong>{aiFinalReport.finalCharacter.title}</strong>
+                </p>
+                <p style={{ margin: "0 0 8px" }}>{aiFinalReport.finalCharacter.description}</p>
+                <img
+                  src={`data:image/svg+xml;utf8,${encodeURIComponent(aiFinalReport.finalCharacter.svg)}`}
+                  alt="AI 최종 캐릭터"
+                  style={{
+                    width: 220,
+                    height: 220,
+                    borderRadius: 12,
+                    border: "1px solid #cfe0b0",
+                    background: "#fff",
+                  }}
+                />
+              </div>
+            </div>
+          ) : null}
         </section>
       ) : null}
       </aside>

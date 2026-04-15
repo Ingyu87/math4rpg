@@ -5,6 +5,7 @@ import {
   runTransaction,
   update,
   remove,
+  set,
   type Unsubscribe,
 } from "firebase/database";
 import { getAchievementByLevel } from "../config/achievement";
@@ -255,7 +256,7 @@ export function subscribeActivityLogsByClassCode(
 
 /** 관리자용: 반 활동로그 + 학생 성취수준(학습 상태) 초기화 */
 export async function resetClassProgressAndActivity(classCode: string): Promise<{
-  resetStudents: number;
+  removedStudents: number;
   removedLogs: number;
 }> {
   if (!isValidClassCode(classCode)) {
@@ -264,41 +265,49 @@ export async function resetClassProgressAndActivity(classCode: string): Promise<
 
   const studentsSnap = await get(ref(realtimeDb, "students"));
   const studentsRaw = (studentsSnap.val() ?? {}) as Record<string, any>;
-  const updates: Record<string, unknown> = {};
-  let resetStudents = 0;
+  const studentRemovals: Promise<void>[] = [];
+  const touchedGroupIds = new Set<number>();
+  let removedStudents = 0;
   for (const [userId, value] of Object.entries(studentsRaw)) {
     if (String(value?.classCode ?? "") !== classCode) continue;
-    resetStudents += 1;
-    const base = `students/${userId}`;
-    updates[`${base}/level`] = 1;
-    updates[`${base}/levelProgress`] = 0;
-    updates[`${base}/recentAccuracy`] = 0;
-    updates[`${base}/wrongStreak`] = 0;
-    updates[`${base}/hp`] = 100;
-    updates[`${base}/appearanceTier`] = 1;
-    updates[`${base}/earnedItems`] = [];
-    updates[`${base}/updatedAt`] = Date.now();
+    removedStudents += 1;
+    const gid = Number(value?.groupId ?? 0);
+    if (Number.isInteger(gid) && gid >= 1 && gid <= 5) {
+      touchedGroupIds.add(gid);
+      studentRemovals.push(remove(ref(realtimeDb, `groups/${gid}/members/${userId}`)));
+    }
+    studentRemovals.push(remove(ref(realtimeDb, `students/${userId}`)));
   }
 
-  if (Object.keys(updates).length > 0) {
-    await update(ref(realtimeDb), updates);
+  if (studentRemovals.length > 0) {
+    await Promise.all(studentRemovals);
+  }
+
+  if (touchedGroupIds.size > 0) {
+    await Promise.all(
+      [...touchedGroupIds].map(async (gid) => {
+        const membersSnap = await get(ref(realtimeDb, `groups/${gid}/members`));
+        const count = membersSnap.exists() ? Object.keys(membersSnap.val() as object).length : 0;
+        await set(ref(realtimeDb, `groups/${gid}/onlineCount`), count);
+      }),
+    );
   }
 
   const logsSnap = await get(ref(realtimeDb, "activityLogs"));
   const logsRaw = (logsSnap.val() ?? {}) as Record<string, Record<string, any>>;
-  const removals: Promise<void>[] = [];
+  const logRemovals: Promise<void>[] = [];
   let removedLogs = 0;
   for (const gid of ["1", "2", "3", "4", "5"]) {
     const groupLogs = logsRaw[gid] ?? {};
     for (const [logId, logValue] of Object.entries(groupLogs)) {
       if (String(logValue?.classCode ?? "") !== classCode) continue;
       removedLogs += 1;
-      removals.push(remove(ref(realtimeDb, `activityLogs/${gid}/${logId}`)));
+      logRemovals.push(remove(ref(realtimeDb, `activityLogs/${gid}/${logId}`)));
     }
   }
-  if (removals.length > 0) {
-    await Promise.all(removals);
+  if (logRemovals.length > 0) {
+    await Promise.all(logRemovals);
   }
 
-  return { resetStudents, removedLogs };
+  return { removedStudents, removedLogs };
 }

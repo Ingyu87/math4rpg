@@ -34,7 +34,7 @@ export const ACHIEVEMENT_TITLES: Record<AchievementLevel, string> = {
 };
 
 export const ACHIEVEMENT_DESCRIPTIONS: Record<AchievementLevel, string> = {
-  도전: "한 자리·기본 연산 규칙을 다시 확인하며 천천히 정확도를 만드는 단계",
+  도전: "세 자리 수 곱셈·나눗셈의 기본 절차를 익히며 정확도를 만드는 단계",
   기초: "세 자리 수와 몇십의 곱셈을 절차에 맞춰 해결할 수 있는 단계",
   발전: "곱셈/나눗셈 유형을 구분해 계산 전략을 선택할 수 있는 단계",
   숙련: "두 자리 수로 나누는 계산을 실수 없이 안정적으로 수행하는 단계",
