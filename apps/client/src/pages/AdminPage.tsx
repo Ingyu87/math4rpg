@@ -21,20 +21,6 @@ import {
 } from "../services/classCode";
 import { adminRemoveStudentFromGroup } from "../services/groupSession";
 
-const EVENT_LABELS: Record<string, string> = {
-  JOIN_GROUP: "모둠 입장",
-  LEAVE_GROUP: "모둠 퇴장",
-  BATTLE_CORRECT: "문제 정답",
-  BATTLE_WRONG: "문제 오답",
-  LEVEL_UP: "레벨 업",
-  LEVEL_DOWN: "레벨 다운",
-  GAME_CLEAR: "만렙 달성",
-};
-
-function eventLabel(type: string) {
-  return EVENT_LABELS[type] ?? type;
-}
-
 type LessonStat = {
   lesson: number;
   attempts: number;
@@ -73,7 +59,6 @@ export default function AdminPage() {
   const [classCode, setClassCode] = useState<string>("");
   const [students, setStudents] = useState<StudentStatus[]>([]);
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
-  const [selectedLogType, setSelectedLogType] = useState("ALL");
   const [selectedStudentId, setSelectedStudentId] = useState<string>("");
   const [adminGroupMsg, setAdminGroupMsg] = useState<string>("");
   const [adminResetMsg, setAdminResetMsg] = useState<string>("");
@@ -124,11 +109,6 @@ export default function AdminPage() {
     });
     return byGroup;
   }, [students]);
-
-  const filteredLogs = useMemo(() => {
-    if (selectedLogType === "ALL") return activityLogs;
-    return activityLogs.filter((log) => log.type === selectedLogType);
-  }, [activityLogs, selectedLogType]);
 
   const selectedStudentLogs = useMemo(() => {
     if (!selectedStudentId) return [];
@@ -407,55 +387,6 @@ export default function AdminPage() {
         </table>
       </section>
 
-      <section className="page-card">
-        <h3>반 활동 로그 (실시간)</h3>
-        <div style={{ display: "flex", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
-          {[
-            "ALL",
-            "BATTLE_CORRECT",
-            "BATTLE_WRONG",
-            "LEVEL_UP",
-            "LEVEL_DOWN",
-            "GAME_CLEAR",
-          ].map((type) => (
-              <button
-                key={type}
-                type="button"
-                onClick={() => setSelectedLogType(type)}
-                style={{
-                  border:
-                    selectedLogType === type ? "2px solid #7a5fd1" : "1px solid #d9cef9",
-                }}
-              >
-                {type === "ALL" ? "전체" : eventLabel(type)}
-              </button>
-            ))}
-        </div>
-        {filteredLogs.length === 0 ? (
-          <p>현재 이 반코드의 활동 로그가 없습니다.</p>
-        ) : (
-          <table className="student-table">
-            <thead>
-              <tr>
-                <th>시간</th>
-                <th>모둠</th>
-                <th>학생</th>
-                <th>이벤트</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredLogs.map((log) => (
-                <tr key={log.id}>
-                  <td>{new Date(log.at).toLocaleTimeString()}</td>
-                  <td>{log.groupId}모둠</td>
-                  <td>{log.userName}</td>
-                  <td>{eventLabel(log.type)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </section>
       <section className="page-card">
         <h3>학생 상세 학습 리포트</h3>
         {!selectedStudent ? (

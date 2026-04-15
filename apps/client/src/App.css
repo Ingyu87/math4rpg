@@ -168,8 +168,8 @@
 
 .student-game-card--with-ranking {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 272px;
-  gap: 10px;
+  grid-template-columns: minmax(0, 1fr) 408px;
+  gap: 14px;
   align-items: start;
 }
 
@@ -200,13 +200,14 @@
   position: sticky;
   top: 8px;
   align-self: start;
-  max-height: min(72dvh, calc(100dvh - 180px));
+  min-height: 540px;
+  max-height: min(92dvh, calc(100dvh - 120px));
   overflow-y: auto;
 }
 
 @media (max-width: 960px) {
   .student-game-card--with-ranking {
-    grid-template-columns: minmax(0, 1fr) 220px;
+    grid-template-columns: minmax(0, 1fr) 320px;
   }
 }
 
@@ -283,7 +284,7 @@
   max-width: none;
   margin: 4px auto 0;
   transform-origin: top center;
-  transform: scale(clamp(0.95, calc((100vw - min(34vw, 380px) - 56px) / 640), 1.88));
+  transform: scaleX(1.5) scaleY(2);
 }
 
 @media (max-width: 960px) {
@@ -294,7 +295,8 @@
 
 .student-page-layout .party-game-scale--solo {
   min-height: 0;
-  max-height: min(62dvh, calc(100dvh - 160px));
+  height: 680px;
+  max-height: none;
 }
 
 .student-page-layout .party-layout--split .party-game-scale {
@@ -303,8 +305,20 @@
 }
 
 .student-page-layout .live-ranking-panel {
-  font-size: 11px;
-  padding: 8px 8px;
+  font-size: 15px;
+  padding: 14px 14px;
+}
+
+.student-page-layout .live-ranking-fixed-scope {
+  display: inline-block;
+  width: 100%;
+  padding: 7px 10px;
+  border-radius: 10px;
+  border: 1px solid #b8d488;
+  background: linear-gradient(180deg, #dff3b6 0%, #cae89a 100%);
+  color: #2f4b1b;
+  font-weight: 800;
+  text-align: center;
 }
 
 .student-page-layout .game-section-main h3 {

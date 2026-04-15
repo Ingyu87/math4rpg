@@ -276,7 +276,7 @@ export default function StudentPage() {
   const [monsterFrame, setMonsterFrame] = useState(0);
   const [liveRankings, setLiveRankings] = useState<LiveRankingsBundle>(() => emptyLiveRankingsBundle());
   const [rankingTab, setRankingTab] = useState(1);
-  const [rankingScope, setRankingScope] = useState<RankingScope>("class");
+  const rankingScope: RankingScope = "class";
   const [groupMembers, setGroupMembers] = useState<GroupMemberSummary[]>([]);
   const joinedGroupRef = useRef<GroupId | null>(null);
   const playfieldRef = useRef<HTMLDivElement | null>(null);
@@ -1174,40 +1174,12 @@ export default function StudentPage() {
             </div>
             {joinedGroup ? (
               <aside
-                className={`live-ranking-panel live-ranking-panel--dock${
-                  rankingScope === "allGroups" ? " live-ranking-panel--by-groups" : ""
-                }`}
+                className="live-ranking-panel live-ranking-panel--dock"
                 aria-label="실시간 레벨별 랭킹"
               >
                 <div className="live-ranking-head">실시간 랭킹</div>
-                <div className="live-ranking-scopes" role="tablist" aria-label="랭킹 범위">
-                  <button
-                    type="button"
-                    role="tab"
-                    aria-selected={rankingScope === "class"}
-                    className={rankingScope === "class" ? "active" : ""}
-                    onClick={() => setRankingScope("class")}
-                  >
-                    반 전체
-                  </button>
-                  <button
-                    type="button"
-                    role="tab"
-                    aria-selected={rankingScope === "myGroup"}
-                    className={rankingScope === "myGroup" ? "active" : ""}
-                    onClick={() => setRankingScope("myGroup")}
-                  >
-                    우리 모둠
-                  </button>
-                  <button
-                    type="button"
-                    role="tab"
-                    aria-selected={rankingScope === "allGroups"}
-                    className={rankingScope === "allGroups" ? "active" : ""}
-                    onClick={() => setRankingScope("allGroups")}
-                  >
-                    모둠별
-                  </button>
+                <div className="live-ranking-scopes" aria-label="랭킹 범위">
+                  <span className="live-ranking-fixed-scope">전원 랭킹 (반 전체)</span>
                 </div>
                 <p className="live-ranking-sub">{rankingSubLine}</p>
                 <div className="live-ranking-tabs" role="tablist" aria-label="게임 레벨">
@@ -1224,71 +1196,26 @@ export default function StudentPage() {
                     </button>
                   ))}
                 </div>
-                {rankingScope === "allGroups" ? (
-                  <div className="live-ranking-by-groups">
-                    {([1, 2, 3, 4, 5] as const).map((gid) => {
-                      const rows = liveRankings.perGroupByLevel[rankingTab]?.[gid] ?? [];
-                      return (
-                        <div key={gid} className="live-ranking-mini">
-                          <h4 className="live-ranking-mini__title">{gid}모둠</h4>
-                          {rows.length === 0 ? (
-                            <p className="live-ranking-mini__empty">아직 순위 없음</p>
-                          ) : (
-                            <ol className="live-ranking-list live-ranking-list--compact">
-                              {rows.map((row, idx) => (
-                                <li
-                                  key={row.userId}
-                                  className={row.userId === sessionUserId ? "is-me" : undefined}
-                                >
-                                  <span className="rank-num">{idx + 1}</span>
-                                  <span className="rank-name">{row.name}</span>
-                                  <span className="rank-pct">{row.levelProgress}%</span>
-                                  <span
-                                    className="rank-meta"
-                                    title={row.online ? "접속 중" : "오프라인"}
-                                  >
-                                    {row.online ? "●" : "○"}
-                                  </span>
-                                </li>
-                              ))}
-                            </ol>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <ol className="live-ranking-list live-ranking-list--dock-wide">
-                    {rankingRows.length === 0 ? (
-                      <li className="live-ranking-empty">
-                        {rankingScope === "myGroup"
-                          ? "우리 모둠에 이 레벨 순위가 아직 없어요."
-                          : "이 레벨에 아직 순위가 없어요."}
+                <ol className="live-ranking-list live-ranking-list--dock-wide">
+                  {rankingRows.length === 0 ? (
+                    <li className="live-ranking-empty">이 레벨에 아직 순위가 없어요.</li>
+                  ) : (
+                    rankingRows.map((row, idx) => (
+                      <li
+                        key={row.userId}
+                        className={row.userId === sessionUserId ? "is-me" : undefined}
+                      >
+                        <span className="rank-num">{idx + 1}</span>
+                        <span className="rank-name">{row.name}</span>
+                        <span className="rank-pct">{row.levelProgress}%</span>
+                        <span className="rank-meta" title={row.online ? "접속 중" : "오프라인"}>
+                          {row.groupId == null ? "미참가" : `${row.groupId}모둠`}{" "}
+                          {row.online ? "●" : "○"}
+                        </span>
                       </li>
-                    ) : (
-                      rankingRows.map((row, idx) => (
-                        <li
-                          key={row.userId}
-                          className={row.userId === sessionUserId ? "is-me" : undefined}
-                        >
-                          <span className="rank-num">{idx + 1}</span>
-                          <span className="rank-name">{row.name}</span>
-                          <span className="rank-pct">{row.levelProgress}%</span>
-                          <span className="rank-meta" title={row.online ? "접속 중" : "오프라인"}>
-                            {rankingScope === "class" ? (
-                              <>
-                                {row.groupId == null ? "미참가" : `${row.groupId}모둠`}{" "}
-                                {row.online ? "●" : "○"}
-                              </>
-                            ) : (
-                              <>{row.online ? "●" : "○"}</>
-                            )}
-                          </span>
-                        </li>
-                      ))
-                    )}
-                  </ol>
-                )}
+                    ))
+                  )}
+                </ol>
               </aside>
             ) : null}
         {currentQuestion && (
