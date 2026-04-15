@@ -190,7 +190,7 @@ export default function AdminPage() {
             {students.map((student) => (
               <tr key={student.id}>
                 <td>{student.name}</td>
-                <td>{student.groupId}모둠</td>
+                <td>{student.groupId == null ? "미참가" : `${student.groupId}모둠`}</td>
                 <td>{student.level}</td>
                 <td>
                   <span
@@ -209,31 +209,37 @@ export default function AdminPage() {
                 <td>{student.earnedItems.length}개</td>
                 <td>{student.earnedItems.length === 0 ? "-" : student.earnedItems.join(", ")}</td>
                 <td>
-                  <button
-                    type="button"
-                    title="해당 학생을 모둠에서 내보냅니다"
-                    onClick={async () => {
-                      if (!classCode) {
-                        setAdminGroupMsg("반코드를 불러온 뒤 다시 시도해 주세요.");
-                        return;
-                      }
-                      const ok = window.confirm(
-                        `「${student.name}」 학생을 모둠에서 제외할까요? (학생 화면의 모둠 참가도 해제됩니다.)`,
-                      );
-                      if (!ok) return;
-                      try {
-                        setAdminGroupMsg("");
-                        await adminRemoveStudentFromGroup(classCode, student.id);
-                        setAdminGroupMsg(`「${student.name}」 학생을 모둠에서 제외했습니다.`);
-                      } catch (error) {
-                        setAdminGroupMsg(
-                          error instanceof Error ? error.message : "모둠 제외 처리에 실패했습니다.",
+                  {student.groupId == null ? (
+                    <span style={{ color: "#64748b", fontSize: "0.9rem" }} title="현재 모둠에 속하지 않음">
+                      —
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      title="해당 학생을 모둠에서 보냅니다"
+                      onClick={async () => {
+                        if (!classCode) {
+                          setAdminGroupMsg("반코드를 불러온 뒤 다시 시도해 주세요.");
+                          return;
+                        }
+                        const ok = window.confirm(
+                          `「${student.name}」 학생을 모둠에서 제외할까요? (학생 화면의 모둠 참가도 해제됩니다.)`,
                         );
-                      }
-                    }}
-                  >
-                    모둠에서 제외
-                  </button>
+                        if (!ok) return;
+                        try {
+                          setAdminGroupMsg("");
+                          await adminRemoveStudentFromGroup(classCode, student.id);
+                          setAdminGroupMsg(`「${student.name}」 학생을 모둠에서 제외했습니다.`);
+                        } catch (error) {
+                          setAdminGroupMsg(
+                            error instanceof Error ? error.message : "모둠 제외 처리에 실패했습니다.",
+                          );
+                        }
+                      }}
+                    >
+                      모둠에서 제외
+                    </button>
+                  )}
                 </td>
                 <td>
                   <button

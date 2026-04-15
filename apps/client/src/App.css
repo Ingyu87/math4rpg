@@ -3,6 +3,9 @@
   margin: 0 auto;
   min-height: 100vh;
   padding: 24px;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
 }
 
 .app-shell--student {
@@ -32,9 +35,37 @@
 }
 
 .app-shell-body--default {
-  flex: none;
-  min-height: unset;
+  flex: 1 0 auto;
+  min-height: 0;
   overflow: visible;
+}
+
+.app-site-footer {
+  flex-shrink: 0;
+  margin-top: 20px;
+  padding: 12px 16px;
+  text-align: center;
+  background: #3a3d42;
+  border-radius: 12px;
+}
+
+.app-shell--student .app-site-footer {
+  margin-top: 8px;
+  padding: 8px 12px;
+  border-radius: 10px;
+}
+
+.app-site-footer__link {
+  display: inline-block;
+  font-size: 0.82rem;
+  color: #e8eaed;
+  text-decoration: none;
+  letter-spacing: 0.01em;
+}
+
+.app-site-footer__link:hover {
+  color: #fff;
+  text-decoration: underline;
 }
 
 .app-shell--student .app-shell-body {
@@ -48,6 +79,8 @@
   gap: 10px;
   flex: 1;
   min-height: 0;
+  /* 헤더·패딩 제외한 한 화면: 왼쪽이 길어져도 행 높이가 무한히 커지지 않음 */
+  max-height: calc(100dvh - 144px);
   overflow: hidden;
   align-items: stretch;
 }
@@ -57,6 +90,11 @@
     grid-template-columns: 1fr;
     grid-template-rows: auto minmax(280px, 1fr);
     overflow-y: auto;
+    max-height: none;
+  }
+
+  .student-page-col--side {
+    max-height: none;
   }
 
   .app-shell--student {
@@ -75,12 +113,15 @@
 .student-page-col--side {
   overflow-x: hidden;
   overflow-y: auto;
+  max-height: calc(100dvh - 144px);
   scrollbar-gutter: stable;
 }
 
 .student-page-col--play {
   min-width: 0;
   overflow: hidden;
+  /* 그리드 행이 왼쪽만큼 길어져도 오른쪽 칸을 늘리지 않음 — 전투 문구가 게임 바로 아래에 붙음 */
+  align-self: start;
 }
 
 .student-page-layout .page-card {
@@ -109,7 +150,8 @@
 }
 
 .student-game-card {
-  flex: 1;
+  /* flex:1 이면 왼쪽 열만큼 세로로 늘어나며 플레이 뷰포트 아래에 빈 공간이 생김 */
+  flex: 0 1 auto;
   min-height: 0;
   padding: 12px 14px;
   display: flex;
@@ -118,7 +160,7 @@
 }
 
 .student-play-viewport {
-  flex: 1;
+  flex: 0 1 auto;
   min-height: 0;
   display: flex;
   flex-direction: column;
@@ -126,7 +168,7 @@
 }
 
 .student-page-layout .student-play-viewport > .game-section-wrap {
-  flex: 1;
+  flex: 0 1 auto;
   min-height: 0;
   overflow: hidden;
 }
@@ -805,7 +847,8 @@ select {
 .party-game-scale--solo {
   height: auto;
   overflow: visible;
-  min-height: min(480px, 72vh);
+  /* min-height를 크게 두면 transform만 적용된 게임 박스 아래에 레이아웃 빈칸이 커짐 */
+  min-height: 0;
 }
 
 /* 논리 좌표는 640×320 유지, 화면에 맞게 시각 확대 */

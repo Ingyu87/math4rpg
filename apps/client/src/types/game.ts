@@ -5,7 +5,8 @@ export type GroupId = 1 | 2 | 3 | 4 | 5;
 export interface StudentStatus {
   id: string;
   name: string;
-  groupId: GroupId;
+  /** 모둠 미참가·퇴장 후 RTDB `groupId: null` → null */
+  groupId: GroupId | null;
   level: number;
   levelProgress: number;
   recentAccuracy: number;

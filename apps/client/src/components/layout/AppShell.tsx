@@ -33,6 +33,16 @@ export default function AppShell({ children }: PropsWithChildren) {
       <div className={studentLayout ? "app-shell-body" : "app-shell-body app-shell-body--default"}>
         {children}
       </div>
+      <footer className="app-site-footer">
+        <a
+          className="app-site-footer__link"
+          href="https://aiworld-ig.vercel.app/"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          © 2026 ingyu's AI world. All rights reserved.
+        </a>
+      </footer>
     </div>
   );
 }

@@ -74,12 +74,20 @@ export async function classCodeExists(classCode: string) {
   return snap.val()?.active !== false;
 }
 
+/** RTDB `groupId`가 null·빈값이면 모둠 미참가 (`?? 1`이면 퇴장 후에도 1모둠로 잘못 표시됨) */
+function parseStudentGroupId(raw: unknown): GroupId | null {
+  if (raw === null || raw === undefined || raw === "") return null;
+  const n = typeof raw === "number" ? raw : Number(raw);
+  if (!Number.isFinite(n) || !Number.isInteger(n) || n < 1 || n > 5) return null;
+  return n as GroupId;
+}
+
 function toStudentStatus(userId: string, value: any): StudentStatus {
   const level = Number(value?.level ?? 1);
   return {
     id: userId,
     name: String(value?.name ?? "학생"),
-    groupId: Number(value?.groupId ?? 1) as 1 | 2 | 3 | 4 | 5,
+    groupId: parseStudentGroupId(value?.groupId),
     level,
     levelProgress: Number(value?.levelProgress ?? 0),
     recentAccuracy: Number(value?.recentAccuracy ?? 0),
@@ -113,7 +121,7 @@ export type LevelRankingEntry = {
   userId: string;
   name: string;
   levelProgress: number;
-  groupId: GroupId;
+  groupId: GroupId | null;
   online: boolean;
 };
 
@@ -140,7 +148,7 @@ export function subscribeLevelRankingsByClassCode(
         userId,
         name: String(v?.name ?? "학생"),
         levelProgress: Number(v?.levelProgress ?? 0),
-        groupId: Number(v?.groupId ?? 1) as GroupId,
+        groupId: parseStudentGroupId(v?.groupId),
         online: Boolean(v?.online),
       });
     }

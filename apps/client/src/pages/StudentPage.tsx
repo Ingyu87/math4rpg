@@ -1072,7 +1072,8 @@ export default function StudentPage() {
                       <span className="rank-name">{row.name}</span>
                       <span className="rank-pct">{row.levelProgress}%</span>
                       <span className="rank-meta" title={row.online ? "접속 중" : "오프라인"}>
-                        {row.groupId}모둠 {row.online ? "●" : "○"}
+                        {row.groupId == null ? "미참가" : `${row.groupId}모둠`}{" "}
+                        {row.online ? "●" : "○"}
                       </span>
                     </li>
                   ))
