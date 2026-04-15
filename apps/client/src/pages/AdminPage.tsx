@@ -187,17 +187,6 @@ export default function AdminPage() {
       }))
       .sort((a, b) => a.lesson - b.lesson);
 
-    const meaningful = lessonStats.filter((s) => s.attempts >= 2);
-    const pool = meaningful.length > 0 ? meaningful : lessonStats;
-    const strengthLesson =
-      pool.length > 0
-        ? [...pool].sort((a, b) => b.accuracy - a.accuracy || b.attempts - a.attempts)[0]
-        : null;
-    const supportLesson =
-      pool.length > 0
-        ? [...pool].sort((a, b) => a.accuracy - b.accuracy || b.attempts - a.attempts)[0]
-        : null;
-
     const kindStats = [...kindMap.entries()]
       .map(([kind, v]) => ({
         kind,
@@ -219,8 +208,6 @@ export default function AdminPage() {
       wrong,
       accuracy,
       lessonStats,
-      strengthLesson,
-      supportLesson,
       kindStats,
       rubric,
     };
@@ -482,7 +469,7 @@ export default function AdminPage() {
       <section className="page-card">
         <h3>학생 상세 학습 리포트</h3>
         {!selectedStudent ? (
-          <p>학생 목록에서 '보기'를 누르면 풀이량·레벨·정답률·강점/보완점을 바로 보여줍니다.</p>
+          <p>학생 목록에서 '보기'를 누르면 풀이량·레벨·정답률과 차시별/유형별 학습 지표를 보여줍니다.</p>
         ) : !selectedStudentReport ? (
           <p>선택한 학생의 학습 데이터를 불러올 수 없습니다.</p>
         ) : (
@@ -534,22 +521,12 @@ export default function AdminPage() {
             <p>
               <strong>평가 루브릭:</strong> {aiReport?.rubricNote ?? selectedStudentReport.rubric}
             </p>
-            <p>
-              <strong>강점 영역:</strong>{" "}
-              {aiReport?.strengths?.length
-                ? aiReport.strengths.join(" / ")
-                : selectedStudentReport.strengthLesson
-                ? `${selectedStudentReport.strengthLesson.lesson}차시 (정답률 ${selectedStudentReport.strengthLesson.accuracy}%, ${selectedStudentReport.strengthLesson.attempts}문항)`
-                : "아직 분석할 풀이 데이터가 부족합니다."}
-            </p>
-            <p>
-              <strong>보완 필요 영역:</strong>{" "}
-              {aiReport?.weaknesses?.length
-                ? aiReport.weaknesses.join(" / ")
-                : selectedStudentReport.supportLesson
-                ? `${selectedStudentReport.supportLesson.lesson}차시 (정답률 ${selectedStudentReport.supportLesson.accuracy}%, ${selectedStudentReport.supportLesson.attempts}문항)`
-                : "아직 분석할 풀이 데이터가 부족합니다."}
-            </p>
+            {aiReport?.strengths?.length || aiReport?.weaknesses?.length ? (
+              <p>
+                <strong>AI 관찰 포인트:</strong>{" "}
+                {[...(aiReport.strengths ?? []), ...(aiReport.weaknesses ?? [])].join(" / ")}
+              </p>
+            ) : null}
             {aiReport?.summary ? (
               <p>
                 <strong>AI 종합 의견:</strong> {aiReport.summary}
