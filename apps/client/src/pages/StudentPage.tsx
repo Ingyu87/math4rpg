@@ -784,17 +784,33 @@ export default function StudentPage() {
       localStorage.setItem("math4rpg_character", selectedCharacterId);
       await joinGroup(selectedGroup, sessionUserId, trimmed, code);
       const persisted = await getStudentState(sessionUserId);
+      const restoredLevel = persisted?.level ?? 1;
+      const restoredProgress = Math.min(
+        100,
+        Math.max(0, Math.round(Number(persisted?.levelProgress ?? 0))),
+      );
       if (persisted) {
-        setPlayerLevel(persisted.level ?? 1);
-        setLevelCorrectCount(
-          Math.max(0, Math.round(((persisted.levelProgress ?? 0) / 100) * 15)),
-        );
+        setPlayerLevel(restoredLevel);
+        setLevelCorrectCount(Math.max(0, Math.round((restoredProgress / 100) * 15)));
         setWrongStreak(persisted.wrongStreak ?? 0);
         setHp(persisted.hp ?? 100);
         setAppearanceTier(persisted.appearanceTier ?? 1);
         setEarnedItems(persisted.earnedItems ?? []);
       }
       setJoinedGroup(selectedGroup);
+      await syncStudentBattleState({
+        userId: sessionUserId,
+        userName: trimmed,
+        classCode: code,
+        groupId: selectedGroup,
+        level: restoredLevel,
+        levelProgress: restoredProgress,
+        recentAccuracy: Math.min(100, Math.max(0, Math.round(Number(persisted?.recentAccuracy ?? 0)))),
+        wrongStreak: persisted?.wrongStreak ?? 0,
+        hp: persisted?.hp ?? 100,
+        appearanceTier: persisted?.appearanceTier ?? 1,
+        earnedItems: persisted?.earnedItems ?? [],
+      });
       {
         const pack = spawnWildMonsters(playerPos);
         seedMonsterVelocities(pack, monsterVelRef);
@@ -802,6 +818,9 @@ export default function StudentPage() {
       }
       setMessage(`${selectedGroup}모둠 입장 완료`);
       pushToast(`${selectedGroup}모둠에 입장했어요!`, "success");
+      if (persisted && (restoredLevel > 1 || restoredProgress > 0)) {
+        pushToast(`Lv${restoredLevel} 진도를 이어갑니다.`, "info");
+      }
     } catch (error) {
       const text = error instanceof Error ? error.message : "입장 실패";
       setMessage(text);
