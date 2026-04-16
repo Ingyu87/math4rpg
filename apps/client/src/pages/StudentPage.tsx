@@ -2,7 +2,12 @@ import { onValue, ref as dbRef } from "firebase/database";
 import { motion } from "framer-motion";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { realtimeDb } from "../config/firebase";
-import { ACHIEVEMENT_COLORS, getAchievementByLevel } from "../config/achievement";
+import {
+  ACHIEVEMENT_COLORS,
+  ACHIEVEMENT_DESCRIPTIONS,
+  ACHIEVEMENT_TITLES,
+  getAchievementByLevel,
+} from "../config/achievement";
 import CuteToast from "../components/ui/CuteToast";
 import NpcBubble from "../components/ui/NpcBubble";
 import type { BattleQuestion, GroupId } from "../types/game";
@@ -52,6 +57,44 @@ const STUDENT_ACHIEVEMENT_LABEL: Record<string, string> = {
   "4수01-04": "세 자리 수의 곱셈 계산과 의미를 이해해 문제를 해결해요",
   "4수01-07": "나눗셈에서 몫과 나머지의 관계를 이해해 계산해요",
 };
+
+type AchievementStandardUi = "4수01-04" | "4수01-07";
+
+type CelebrationModalState = {
+  variant: "level" | "grand";
+  clearedLevel: number;
+  lesson: number;
+  correct: number;
+  wrong: number;
+  total: number;
+  praise: string;
+  achievementTitle: string;
+  achievementDesc: string;
+  standardCode: AchievementStandardUi;
+  standardGuide: string;
+};
+
+function achievementStandardForLesson(lesson: number): AchievementStandardUi {
+  return lesson <= 3 ? "4수01-04" : "4수01-07";
+}
+
+/** 이번 레벨 구간에서의 정·오답 수로 짧은 격려 문구 생성 */
+function buildLevelPraise(correct: number, wrong: number): string {
+  const total = correct + wrong;
+  const accPct = total > 0 ? Math.round((correct / total) * 100) : 100;
+  const bits: string[] = [];
+  if (wrong === 0) {
+    bits.push("이번 단계에서 오답 없이 목표(정답 15문항)까지 도달했어요.");
+  } else if (wrong <= 2) {
+    bits.push(`오답 ${wrong}번을 이겨 내고 목표를 완주했어요.`);
+  } else {
+    bits.push(`이번 단계에서 총 ${total}문제를 풀었고, 그중 정답 ${correct}문제를 맞혔어요.`);
+  }
+  if (accPct >= 90) bits.push(`정답률 ${accPct}%로 매우 안정적인 이해를 보여 주었습니다.`);
+  else if (accPct >= 75) bits.push(`정답률 ${accPct}%로 양호한 편이에요.`);
+  if (wrong > 3) bits.push("다음 단계에서는 문제를 천천히 읽고 검산하는 습관을 붙여 보세요.");
+  return bits.join(" ");
+}
 
 /** 숲에 돌아다니는 몬스터 한 마리 (96×32 워크 스트립 공통) */
 type WildMonster = {
@@ -338,6 +381,8 @@ export default function StudentPage() {
   const [aiFinalReport, setAiFinalReport] = useState<AiFinalReport | null>(null);
   const [aiFinalLoading, setAiFinalLoading] = useState(false);
   const [aiFinalError, setAiFinalError] = useState("");
+  const [celebrationModal, setCelebrationModal] = useState<CelebrationModalState | null>(null);
+  const celebrationOpenRef = useRef(false);
 
   const [playerPos, setPlayerPos] = useState({ x: 90, y: 120 });
   const [playerFacing, setPlayerFacing] = useState<Facing>("down");
@@ -471,6 +516,22 @@ export default function StudentPage() {
   }, [joinedGroup]);
 
   useEffect(() => {
+    celebrationOpenRef.current = celebrationModal != null;
+  }, [celebrationModal]);
+
+  useEffect(() => {
+    if (!celebrationModal) return;
+    const onEsc = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      e.preventDefault();
+      celebrationOpenRef.current = false;
+      setCelebrationModal(null);
+    };
+    window.addEventListener("keydown", onEsc, true);
+    return () => window.removeEventListener("keydown", onEsc, true);
+  }, [celebrationModal]);
+
+  useEffect(() => {
     if (joinedGroup) {
       localStorage.setItem(JOINED_GROUP_STORAGE_KEY, String(joinedGroup));
       return;
@@ -532,6 +593,7 @@ export default function StudentPage() {
 
   const tryMove = useCallback(
     (event: KeyboardEvent) => {
+      if (celebrationOpenRef.current) return;
       if (!joinedGroupRef.current || currentQuestion || isCleared) return;
       const step = 12;
       let dx = 0;
@@ -674,7 +736,7 @@ export default function StudentPage() {
   }, [currentQuestion, isCleared]);
 
   useEffect(() => {
-    if (!joinedGroup || currentQuestion || isCleared) return;
+    if (!joinedGroup || currentQuestion || isCleared || celebrationModal) return;
     const hit = wildMonsters.some(
       (m) => Math.hypot(playerPos.x - m.x, playerPos.y - m.y) < 38,
     );
@@ -685,7 +747,16 @@ export default function StudentPage() {
       setSubjectiveAnswer("");
       pushToast("몬스터를 만났어요! 문제에 도전하세요.", "info");
     }
-  }, [joinedGroup, playerPos, wildMonsters, currentQuestion, playerLevel, isCleared, pushToast]);
+  }, [
+    joinedGroup,
+    playerPos,
+    wildMonsters,
+    currentQuestion,
+    playerLevel,
+    isCleared,
+    celebrationModal,
+    pushToast,
+  ]);
 
   const handleJoin = useCallback(async () => {
     const trimmed = nickname.trim();
@@ -825,8 +896,32 @@ export default function StudentPage() {
       }
 
       if (nextCorrect >= 15) {
+        const clearedLevel = playerLevel;
+        const prevLv = levelStats[clearedLevel];
+        const correctAtLevel = prevLv.correct + 1;
+        const wrongAtLevel = prevLv.wrong;
+        const totalAtLevel = correctAtLevel + wrongAtLevel;
+        const lessonNum = getLessonByLevel(clearedLevel);
+        const ach = getAchievementByLevel(clearedLevel);
+        const standardCode = achievementStandardForLesson(lessonNum);
+        const praiseBase = buildLevelPraise(correctAtLevel, wrongAtLevel);
+
+        celebrationOpenRef.current = true;
         if (playerLevel < 6) {
           const nextLevel = playerLevel + 1;
+          setCelebrationModal({
+            variant: "level",
+            clearedLevel,
+            lesson: lessonNum,
+            correct: correctAtLevel,
+            wrong: wrongAtLevel,
+            total: totalAtLevel,
+            praise: praiseBase,
+            achievementTitle: ACHIEVEMENT_TITLES[ach],
+            achievementDesc: ACHIEVEMENT_DESCRIPTIONS[ach],
+            standardCode,
+            standardGuide: STUDENT_ACHIEVEMENT_LABEL[standardCode],
+          });
           setPlayerLevel((prev) => prev + 1);
           setLevelCorrectCount(0);
           setHp((prev) => Math.min(100, prev + 10));
@@ -842,6 +937,19 @@ export default function StudentPage() {
             });
           }
         } else {
+          setCelebrationModal({
+            variant: "grand",
+            clearedLevel,
+            lesson: lessonNum,
+            correct: correctAtLevel,
+            wrong: wrongAtLevel,
+            total: totalAtLevel,
+            praise: `${praiseBase} 마지막 단계까지 완주했어요!`,
+            achievementTitle: ACHIEVEMENT_TITLES[ach],
+            achievementDesc: ACHIEVEMENT_DESCRIPTIONS[ach],
+            standardCode,
+            standardGuide: STUDENT_ACHIEVEMENT_LABEL[standardCode],
+          });
           setIsCleared(true);
           setBattleFeedback("만렙입니다! 레벨6 목표 15문항을 달성했습니다.");
           if (joinedGroup) {
@@ -1645,6 +1753,57 @@ export default function StudentPage() {
                   </button>
                 </div>
               )}
+            </div>
+          </div>
+        ) : null}
+        {celebrationModal ? (
+          <div
+            className="celebration-overlay"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="celebration-title"
+          >
+            <div className="celebration-dialog">
+              <h3 id="celebration-title" className="celebration-dialog__title">
+                {celebrationModal.variant === "grand"
+                  ? "만렙 달성! 정말 수고했어요"
+                  : `레벨 ${celebrationModal.clearedLevel} 완료! 수고했어요`}
+              </h3>
+              <p className="celebration-dialog__sub">
+                {celebrationModal.variant === "grand"
+                  ? "6단계 학습 목표를 모두 마쳤어요."
+                  : `이제 레벨 ${celebrationModal.clearedLevel + 1}(차시 ${getLessonByLevel(celebrationModal.clearedLevel + 1)})로 이어가요.`}
+              </p>
+              <div className="celebration-dialog__stats" role="group" aria-label="이번 단계 결과">
+                <p>
+                  <strong>이번 단계 풀이</strong> · 총 {celebrationModal.total}문제 중 정답{" "}
+                  {celebrationModal.correct} · 오답 {celebrationModal.wrong}
+                </p>
+                <p className="celebration-dialog__praise">{celebrationModal.praise}</p>
+              </div>
+              <div className="celebration-dialog__standard" role="group" aria-label="성취기준 안내">
+                <p className="celebration-dialog__standard-head">관련 성취기준</p>
+                <p>
+                  <strong>{celebrationModal.standardCode}</strong> — {celebrationModal.standardGuide}
+                </p>
+              </div>
+              <div className="celebration-dialog__achievement" role="group" aria-label="성취수준 안내">
+                <p className="celebration-dialog__achievement-head">이번 단계 성취수준</p>
+                <p>
+                  <strong>{celebrationModal.achievementTitle}</strong>
+                </p>
+                <p className="celebration-dialog__achievement-desc">{celebrationModal.achievementDesc}</p>
+              </div>
+              <button
+                type="button"
+                className="celebration-dialog__ok"
+                onClick={() => {
+                  celebrationOpenRef.current = false;
+                  setCelebrationModal(null);
+                }}
+              >
+                확인
+              </button>
             </div>
           </div>
         ) : null}

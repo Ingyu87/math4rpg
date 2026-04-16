@@ -1493,6 +1493,97 @@ select {
   backdrop-filter: blur(2px);
 }
 
+.celebration-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgb(24 40 18 / 38%);
+  backdrop-filter: blur(3px);
+}
+
+.celebration-dialog {
+  width: min(92vw, 440px);
+  max-height: min(86dvh, 640px);
+  overflow-y: auto;
+  margin: 0;
+  padding: 18px 20px 16px;
+  border-radius: 20px;
+  border: 2px solid #b8dc7a;
+  background: linear-gradient(180deg, #fffef8 0%, #f4ffe8 100%);
+  box-shadow: 0 16px 40px rgb(40 60 20 / 25%);
+  color: #2d4018;
+}
+
+.celebration-dialog__title {
+  margin: 0 0 6px;
+  font-size: 1.2rem;
+  font-weight: 900;
+  line-height: 1.35;
+  color: #35531e;
+}
+
+.celebration-dialog__sub {
+  margin: 0 0 12px;
+  font-size: 0.95rem;
+  line-height: 1.45;
+  color: #4a5c32;
+}
+
+.celebration-dialog__stats {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid #dce8c8;
+  background: rgb(255 255 255 / 65%);
+  font-size: 0.92rem;
+  line-height: 1.5;
+}
+
+.celebration-dialog__stats p {
+  margin: 0;
+}
+
+.celebration-dialog__praise {
+  margin-top: 8px !important;
+  font-weight: 700;
+  color: #3d5a22;
+}
+
+.celebration-dialog__standard,
+.celebration-dialog__achievement {
+  margin: 0 0 10px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid #e0ecc8;
+  background: rgb(255 255 255 / 45%);
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
+
+.celebration-dialog__standard-head,
+.celebration-dialog__achievement-head {
+  margin: 0 0 4px;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: #5f6d42;
+  text-transform: none;
+}
+
+.celebration-dialog__achievement-desc {
+  margin: 6px 0 0 !important;
+  color: #4b5d33;
+}
+
+.celebration-dialog__ok {
+  width: 100%;
+  margin-top: 4px;
+}
+
 .battle-dialog--center {
   width: min(92vw, 720px);
   max-height: min(82dvh, 780px);
