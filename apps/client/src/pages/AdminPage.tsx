@@ -6,7 +6,7 @@ import {
   ACHIEVEMENT_DESCRIPTIONS,
   ACHIEVEMENT_TITLES,
 } from "../config/achievement";
-import type { ActivityLog, GroupStatus, StudentStatus } from "../types/game";
+import type { ActivityLog, GroupId, GroupStatus, StudentStatus } from "../types/game";
 import {
   observeAdminAuth,
   signInAdminWithGoogle,
@@ -99,10 +99,9 @@ export default function AdminPage() {
 
   const groups: GroupStatus[] = useMemo(() => {
     const byGroup = [1, 2, 3, 4, 5].map((groupId) => {
-      const grouped = students.filter(
-        (student) => student.groupId === groupId && student.online,
-      );
+      const grouped = students.filter((student) => student.groupId === groupId);
       const size = grouped.length;
+      const onlineCount = grouped.filter((student) => student.online).length;
       const avgLevel =
         size === 0
           ? 0
@@ -118,12 +117,37 @@ export default function AdminPage() {
             );
       return {
         groupId: groupId as 1 | 2 | 3 | 4 | 5,
-        onlineCount: size,
+        onlineCount,
         avgLevel,
         avgAccuracy,
       };
     });
     return byGroup;
+  }, [students]);
+
+  const groupLeaderboard = useMemo(() => {
+    return ([1, 2, 3, 4, 5] as GroupId[])
+      .map((groupId) => {
+        const members = students.filter((student) => student.groupId === groupId);
+        const memberCount = members.length;
+        const onlineCount = members.filter((student) => student.online).length;
+        const avgAccuracy =
+          memberCount === 0
+            ? 0
+            : Math.round(
+                members.reduce((sum, student) => sum + student.recentAccuracy, 0) / memberCount,
+              );
+        const avgLevel =
+          memberCount === 0
+            ? 0
+            : Math.round(members.reduce((sum, student) => sum + student.level, 0) / memberCount);
+        return { groupId, memberCount, onlineCount, avgAccuracy, avgLevel };
+      })
+      .sort((a, b) => {
+        if (b.avgAccuracy !== a.avgAccuracy) return b.avgAccuracy - a.avgAccuracy;
+        if (b.avgLevel !== a.avgLevel) return b.avgLevel - a.avgLevel;
+        return b.memberCount - a.memberCount;
+      });
   }, [students]);
 
   const groupStatsForAi = useMemo(
@@ -267,6 +291,29 @@ export default function AdminPage() {
 
       <section className="page-card">
         <h3>모둠 현황</h3>
+        <div className="admin-group-leaderboard">
+          <p className="admin-group-leaderboard__title">모둠 대항 순위 (모둠 평균 정답률 기준)</p>
+          <div className="admin-group-leaderboard__cards">
+            {groupLeaderboard.map((row, idx) => (
+              <article key={`admin-rank-${row.groupId}`} className="admin-group-rank-card">
+                <p className="admin-group-rank-card__head">
+                  <strong>#{idx + 1}</strong> · {row.groupId}모둠
+                </p>
+                {row.memberCount === 0 ? (
+                  <p className="admin-group-rank-card__empty">참여 학생 없음</p>
+                ) : (
+                  <div className="admin-group-rank-card__stats">
+                    <p>평균 정답률: {row.avgAccuracy}%</p>
+                    <p>평균 레벨: Lv{row.avgLevel}</p>
+                    <p>
+                      참여/접속: {row.memberCount}명 / {row.onlineCount}명
+                    </p>
+                  </div>
+                )}
+              </article>
+            ))}
+          </div>
+        </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
           <button
             type="button"
