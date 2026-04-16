@@ -997,12 +997,15 @@ export default function StudentPage() {
       const members = groups[gid] ?? [];
       const memberCount = members.length;
       const totalProgress = members.reduce((sum, row) => sum + row.levelProgress, 0);
+      const totalAccuracy = members.reduce((sum, row) => sum + row.recentAccuracy, 0);
       const avgProgress = memberCount > 0 ? Math.round(totalProgress / memberCount) : 0;
+      const avgAccuracy = memberCount > 0 ? Math.round(totalAccuracy / memberCount) : 0;
       const topProgress = memberCount > 0 ? Math.max(...members.map((row) => row.levelProgress)) : 0;
       const onlineCount = members.filter((row) => row.online).length;
-      return { groupId: gid, memberCount, avgProgress, topProgress, onlineCount };
+      return { groupId: gid, memberCount, avgProgress, avgAccuracy, topProgress, onlineCount };
     });
     return rows.sort((a, b) => {
+      if (b.avgAccuracy !== a.avgAccuracy) return b.avgAccuracy - a.avgAccuracy;
       if (b.avgProgress !== a.avgProgress) return b.avgProgress - a.avgProgress;
       if (b.memberCount !== a.memberCount) return b.memberCount - a.memberCount;
       return b.topProgress - a.topProgress;
@@ -1527,9 +1530,15 @@ export default function StudentPage() {
                           <ol className="live-ranking-list live-ranking-list--compact">
                             <li>
                               <span className="rank-num">·</span>
+                              <span className="rank-name">평균 정답률</span>
+                              <span className="rank-pct">{row.avgAccuracy}%</span>
+                              <span className="rank-meta">팀</span>
+                            </li>
+                            <li>
+                              <span className="rank-num">·</span>
                               <span className="rank-name">평균 성취율</span>
                               <span className="rank-pct">{row.avgProgress}%</span>
-                              <span className="rank-meta">팀</span>
+                              <span className="rank-meta">진도</span>
                             </li>
                             <li>
                               <span className="rank-num">·</span>

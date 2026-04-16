@@ -5,7 +5,6 @@ export default function HomePage() {
   const navigate = useNavigate();
   const [classCode, setClassCode] = useState<string>(localStorage.getItem("math4rpg_class_code") ?? "");
   const [errorMessage, setErrorMessage] = useState("");
-  const isStudentMode = (localStorage.getItem("math4rpg_user_mode") ?? "") === "student";
 
   const handleStartGame = () => {
     const code = classCode.trim();
@@ -62,11 +61,9 @@ export default function HomePage() {
             </span>
             <span className="home-start-btn__label">게임 시작하기</span>
           </button>
-          {!isStudentMode ? (
-            <Link to="/admin" className="home-admin-btn">
-              관리자 화면
-            </Link>
-          ) : null}
+          <Link to="/admin" className="home-admin-btn">
+            관리자 화면
+          </Link>
         </div>
       </section>
     </div>

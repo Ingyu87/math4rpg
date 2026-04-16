@@ -722,7 +722,7 @@ select {
 .live-ranking-mini {
   border: 1px solid #dce8c8;
   border-radius: 10px;
-  padding: 6px 8px;
+  padding: 7px 9px;
   background: rgb(255 255 255 / 45%);
 }
 
@@ -740,9 +740,10 @@ select {
 }
 
 .live-ranking-list--compact li {
-  grid-template-columns: 16px 1fr 30px 16px;
-  font-size: 10px;
-  padding: 2px 0;
+  grid-template-columns: 12px minmax(0, 1fr) minmax(44px, auto) minmax(30px, auto);
+  font-size: 11px;
+  padding: 3px 0;
+  gap: 6px;
 }
 
 .live-ranking-sub {

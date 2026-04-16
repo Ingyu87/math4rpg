@@ -123,6 +123,7 @@ export type LevelRankingEntry = {
   userId: string;
   name: string;
   levelProgress: number;
+  recentAccuracy: number;
   groupId: GroupId | null;
   online: boolean;
 };
@@ -189,6 +190,7 @@ export function subscribeLevelRankingsByClassCode(
         userId,
         name: String(v?.name ?? "학생"),
         levelProgress: Number(v?.levelProgress ?? 0),
+        recentAccuracy: Number(v?.recentAccuracy ?? 0),
         groupId: parseStudentGroupId(v?.groupId),
         online: Boolean(v?.online),
       });
