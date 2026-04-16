@@ -524,7 +524,8 @@ select {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  z-index: 50;
+  /* 전투 오버레이(.battle-overlay z-index:70)보다 위 — 알림이 딤에 가리지 않게 */
+  z-index: 110;
 }
 
 .cute-toast {
@@ -1451,6 +1452,8 @@ select {
 }
 
 .battle-feedback {
+  position: relative;
+  z-index: 100;
   margin-top: 10px;
   padding: 10px 12px;
   border-radius: 12px;
