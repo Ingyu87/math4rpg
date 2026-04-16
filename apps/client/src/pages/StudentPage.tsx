@@ -1522,6 +1522,15 @@ export default function StudentPage() {
                     {groupRankingRows.map((row, idx) => (
                       <section key={row.groupId} className="live-ranking-mini">
                         <p className="live-ranking-mini__title">
+                          {idx < 3 ? (
+                            <span
+                              className={`rank-medal rank-medal--${
+                                idx === 0 ? "gold" : idx === 1 ? "silver" : "bronze"
+                              }`}
+                            >
+                              {idx === 0 ? "금" : idx === 1 ? "은" : "동"}
+                            </span>
+                          ) : null}{" "}
                           #{idx + 1} · {row.groupId}모둠
                         </p>
                         {row.memberCount === 0 ? (

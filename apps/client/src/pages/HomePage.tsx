@@ -61,7 +61,13 @@ export default function HomePage() {
             </span>
             <span className="home-start-btn__label">게임 시작하기</span>
           </button>
-          <Link to="/admin" className="home-admin-btn">
+          <Link
+            to="/admin"
+            className="home-admin-btn"
+            onClick={() => {
+              localStorage.setItem("math4rpg_user_mode", "admin");
+            }}
+          >
             관리자 화면
           </Link>
         </div>
