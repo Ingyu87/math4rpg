@@ -60,6 +60,20 @@ function parseMembersMap(current: unknown): Record<string, GroupSessionInfo> {
   return current as Record<string, GroupSessionInfo>;
 }
 
+function normalizeClassCode(value: unknown): string {
+  return String(value ?? "").trim();
+}
+
+function countMembersByClass(
+  members: Record<string, GroupSessionInfo>,
+  classCode: string,
+): number {
+  const normalized = normalizeClassCode(classCode);
+  return Object.values(members).filter(
+    (member) => normalizeClassCode(member?.classCode) === normalized,
+  ).length;
+}
+
 async function setOnlineCountFromMembers(groupId: GroupId) {
   const snap = await get(membersRootRef(realtimeDb, groupId));
   const n = snap.exists() ? Object.keys(snap.val() as object).length : 0;
@@ -86,8 +100,6 @@ export async function joinGroup(
   classCode: string,
 ) {
   const membersRoot = membersRootRef(realtimeDb, groupId);
-  const existingMember = await get(memberRef(realtimeDb, groupId, userId));
-
   const joinedAt = Date.now();
   const session: GroupSessionInfo = {
     userId,
@@ -97,29 +109,23 @@ export async function joinGroup(
     joinedAt,
   };
 
-  /** 이미 이 모둠 멤버면 카운트만 맞추고 학생 노드만 갱신 (탭 복구·새로고침) */
-  if (existingMember.exists()) {
-    await update(ref(realtimeDb, `students/${userId}`), {
-      userId,
-      name: userName,
-      classCode,
-      groupId,
-      online: true,
-      updatedAt: Date.now(),
-    });
-    await setOnlineCountFromMembers(groupId);
-    return;
-  }
-
   const tx = await runTransaction(membersRoot, (current) => {
     const cur = parseMembersMap(current);
-    if (cur[userId]) {
-      return cur;
+    const currentUser = cur[userId];
+    const next = { ...cur };
+
+    // 같은 반으로 재입장하는 경우는 기존 세션을 최신 정보로 갱신
+    if (currentUser && normalizeClassCode(currentUser.classCode) === normalizeClassCode(classCode)) {
+      next[userId] = session;
+      return next;
     }
-    if (Object.keys(cur).length >= MAX_GROUP_SIZE) {
+
+    // 같은 모둠의 다른 반 학생은 정원 계산에서 제외
+    if (countMembersByClass(cur, classCode) >= MAX_GROUP_SIZE) {
       return;
     }
-    return { ...cur, [userId]: session };
+    next[userId] = session;
+    return next;
   });
 
   if (!tx.committed) {
@@ -205,24 +211,29 @@ export async function getStudentState(userId: string): Promise<PersistedStudentS
   };
 }
 
-function memberCountFromGroupNode(groupNode: unknown): number {
-  if (!groupNode || typeof groupNode !== "object") return 0;
-  const members = (groupNode as { members?: unknown }).members;
-  if (!members || typeof members !== "object" || Array.isArray(members)) return 0;
-  return Object.keys(members as object).length;
-}
-
 /** 드롭다운 (n/5): `members` 실제 키 개수 기준 — `onlineCount`와 불일치해도 화면은 멤버 기준 */
-export function subscribeGroupCounts(callback: (counts: Record<number, number>) => void) {
+export function subscribeGroupCounts(
+  classCode: string,
+  callback: (counts: Record<number, number>) => void,
+) {
   const countsRoot = ref(realtimeDb, "groups");
   return onValue(countsRoot, (snapshot) => {
     const raw = snapshot.val() ?? {};
+    const normalized = normalizeClassCode(classCode);
+    const countByClass = (groupNode: unknown) => {
+      if (!groupNode || typeof groupNode !== "object") return 0;
+      const members = (groupNode as { members?: unknown }).members;
+      if (!members || typeof members !== "object" || Array.isArray(members)) return 0;
+      return Object.values(members as Record<string, GroupSessionInfo>).filter(
+        (member) => normalizeClassCode(member?.classCode) === normalized,
+      ).length;
+    };
     callback({
-      1: memberCountFromGroupNode(raw?.["1"]),
-      2: memberCountFromGroupNode(raw?.["2"]),
-      3: memberCountFromGroupNode(raw?.["3"]),
-      4: memberCountFromGroupNode(raw?.["4"]),
-      5: memberCountFromGroupNode(raw?.["5"]),
+      1: countByClass(raw?.["1"]),
+      2: countByClass(raw?.["2"]),
+      3: countByClass(raw?.["3"]),
+      4: countByClass(raw?.["4"]),
+      5: countByClass(raw?.["5"]),
     });
   });
 }
@@ -236,19 +247,21 @@ export type GroupMemberSummary = {
 /** 같은 모둠에 입장한 멤버 목록 (입장 순). 최대 5명 */
 export function subscribeGroupMembers(
   groupId: GroupId,
+  classCode: string,
   callback: (members: GroupMemberSummary[]) => void,
 ) {
   const membersRoot = ref(realtimeDb, `groups/${groupId}/members`);
   return onValue(membersRoot, (snapshot) => {
     const raw = snapshot.val() ?? {};
     const list: GroupMemberSummary[] = Object.entries(raw).map(([userId, value]) => {
-      const v = value as { userName?: string; joinedAt?: number };
+      const v = value as { userName?: string; joinedAt?: number; classCode?: string };
+      if (normalizeClassCode(v?.classCode) !== normalizeClassCode(classCode)) return null;
       return {
         userId,
         userName: String(v?.userName ?? "학생"),
         joinedAt: Number(v?.joinedAt ?? 0),
       };
-    });
+    }).filter((entry): entry is GroupMemberSummary => entry != null);
     list.sort((a, b) => a.joinedAt - b.joinedAt);
     callback(list);
   });

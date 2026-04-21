@@ -482,15 +482,27 @@ export default function StudentPage() {
     [],
   );
 
-  useEffect(() => subscribeGroupCounts(setCounts), []);
+  useEffect(() => {
+    const code = classCode.trim();
+    if (!isValidClassCode(code)) {
+      setCounts({ 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 });
+      return;
+    }
+    return subscribeGroupCounts(code, setCounts);
+  }, [classCode]);
 
   useEffect(() => {
     if (!joinedGroup) {
       setGroupMembers([]);
       return;
     }
-    return subscribeGroupMembers(joinedGroup, setGroupMembers);
-  }, [joinedGroup]);
+    const code = classCode.trim();
+    if (!isValidClassCode(code)) {
+      setGroupMembers([]);
+      return;
+    }
+    return subscribeGroupMembers(joinedGroup, code, setGroupMembers);
+  }, [joinedGroup, classCode]);
 
   useEffect(() => {
     if (!joinedGroup || !isValidClassCode(classCode.trim())) {
