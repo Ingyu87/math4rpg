@@ -393,6 +393,7 @@ export default function StudentPage() {
   const [rankingTab, setRankingTab] = useState(1);
   const [rankingScope, setRankingScope] = useState<RankingScope>("class");
   const [groupMembers, setGroupMembers] = useState<GroupMemberSummary[]>([]);
+  const [isStateHydrated, setIsStateHydrated] = useState(false);
   const joinedGroupRef = useRef<GroupId | null>(null);
   const playfieldRef = useRef<HTMLDivElement | null>(null);
   const particleCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -550,6 +551,39 @@ export default function StudentPage() {
     }
     localStorage.removeItem(JOINED_GROUP_STORAGE_KEY);
   }, [joinedGroup]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!joinedGroup) {
+      setIsStateHydrated(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    (async () => {
+      const persisted = await getStudentState(sessionUserId);
+      if (cancelled) return;
+      if (persisted) {
+        const restoredLevel = persisted.level ?? 1;
+        const restoredProgress = Math.min(
+          100,
+          Math.max(0, Math.round(Number(persisted.levelProgress ?? 0))),
+        );
+        setPlayerLevel(restoredLevel);
+        setLevelCorrectCount(Math.max(0, Math.round((restoredProgress / 100) * 15)));
+        setWrongStreak(persisted.wrongStreak ?? 0);
+        setHp(persisted.hp ?? 100);
+        setAppearanceTier(persisted.appearanceTier ?? 1);
+        setEarnedItems(persisted.earnedItems ?? []);
+      }
+      setIsStateHydrated(true);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [joinedGroup, sessionUserId]);
 
   useEffect(() => {
     const raw = localStorage.getItem(battleDraftStorageKey);
@@ -1063,7 +1097,7 @@ export default function StudentPage() {
   const totalWrong = totalAttempts - totalCorrect;
 
   useEffect(() => {
-    if (!joinedGroup) return;
+    if (!joinedGroup || !isStateHydrated) return;
     void syncStudentBattleState({
       userId: sessionUserId,
       userName: nickname || "학생",
@@ -1089,6 +1123,7 @@ export default function StudentPage() {
     hp,
     appearanceTier,
     earnedItems,
+    isStateHydrated,
   ]);
 
   const displayMembers = useMemo((): GroupMemberSummary[] => {
