@@ -43,12 +43,6 @@ type LevelStats = {
 
 type Facing = "up" | "down" | "left" | "right";
 
-type CharacterOption = {
-  id: string;
-  name: string;
-  sprite: string;
-};
-
 type Rect = { x: number; y: number; width: number; height: number };
 
 type RankingScope = "class" | "myGroup" | "allGroups";
@@ -172,8 +166,6 @@ const ITEM_POOL = [
 /** 아이템 창고에 표시할 칸 수 (텍스트 타일만, 스프라이트 없음) */
 const ITEM_WAREHOUSE_SLOTS = 16;
 
-const AC_VILLAGER_TILE_MOD = ["ac-villager-tile--a", "ac-villager-tile--b", "ac-villager-tile--c", "ac-villager-tile--d"] as const;
-
 const WORLD_WIDTH = 640;
 const WORLD_HEIGHT = 320;
 const ENTITY_SIZE = 32;
@@ -196,12 +188,22 @@ const FACING_ROW: Record<Facing, number> = {
   left: 3,
 };
 
-const CHARACTER_OPTIONS: CharacterOption[] = [
-  { id: "dog", name: "멍멍이", sprite: "/sprites/dog_walk_sheet.svg" },
-  { id: "cat", name: "고양이", sprite: "/sprites/cat_walk_sheet.svg" },
-  { id: "rabbit", name: "토끼", sprite: "/sprites/rabbit_walk_sheet.svg" },
-  { id: "fox", name: "여우", sprite: "/sprites/fox_walk_sheet.svg" },
-];
+/** 캐릭터 고정 스프라이트 (선택 UI 없음) */
+const PLAYABLE_CHARACTER = {
+  id: "default",
+  name: "탐험가",
+  sprite: "/sprites/dog_walk_sheet.svg",
+} as const;
+
+const STUDENT_LOGIN_ID_STORAGE_KEY = "math4rpg_student_login_id";
+const LEGACY_USER_ID_STORAGE_KEY = "math4rpg_user_id";
+
+/** RTDB 경로 세그먼트로 쓸 수 없음: . # $ [ ] / */
+function isValidStudentLoginKey(id: string): boolean {
+  const t = id.trim();
+  if (!t || t.length > 48) return false;
+  return !/[.#$\[\]/]/.test(t);
+}
 
 function formatDuration(seconds: number) {
   const mins = Math.floor(seconds / 60);
@@ -336,8 +338,11 @@ export default function StudentPage() {
   const [classCode, setClassCode] = useState<string>(
     localStorage.getItem("math4rpg_class_code") ?? "",
   );
-  const [selectedCharacterId, setSelectedCharacterId] = useState<string>(
-    localStorage.getItem("math4rpg_character") ?? "",
+  const [studentLoginId, setStudentLoginId] = useState<string>(
+    () =>
+      localStorage.getItem(STUDENT_LOGIN_ID_STORAGE_KEY) ??
+      localStorage.getItem(LEGACY_USER_ID_STORAGE_KEY) ??
+      "",
   );
   const [counts, setCounts] = useState<Record<number, number>>({
     1: 0,
@@ -457,20 +462,11 @@ export default function StudentPage() {
   }, []);
 
   const sessionUserId = useMemo(() => {
-    const key = "math4rpg_user_id";
-    const found = localStorage.getItem(key);
-    if (found) return found;
-    const generated = `u_${crypto.randomUUID().slice(0, 8)}`;
-    localStorage.setItem(key, generated);
-    return generated;
-  }, []);
+    const t = studentLoginId.trim();
+    return isValidStudentLoginKey(t) ? t : "";
+  }, [studentLoginId]);
   const sessionStartedAt = useMemo(() => Date.now(), []);
   const battleDraftStorageKey = useMemo(() => getBattleDraftStorageKey(sessionUserId), [sessionUserId]);
-
-  const selectedCharacter = useMemo(
-    () => CHARACTER_OPTIONS.find((c) => c.id === selectedCharacterId),
-    [selectedCharacterId],
-  );
 
   const pushToast = useCallback(
     (message: string, tone: "success" | "info" | "warning" = "info") => {
@@ -625,6 +621,7 @@ export default function StudentPage() {
   }, [battleDraftStorageKey, currentQuestion, subjectiveAnswer]);
 
   useEffect(() => {
+    if (!sessionUserId) return;
     const r = dbRef(realtimeDb, `students/${sessionUserId}`);
     return onValue(r, (snap) => {
       if (!snap.exists()) return;
@@ -810,10 +807,20 @@ export default function StudentPage() {
       setMessage("닉네임을 먼저 입력해 주세요.");
       return;
     }
-    if (!selectedCharacterId) {
-      setMessage("캐릭터를 먼저 선택해 주세요.");
+    const idRaw = studentLoginId.trim();
+    if (!idRaw) {
+      setMessage("내 접속 코드를 입력해 주세요. (다시 들어올 때도 같은 코드를 쓰면 이어하기 됩니다.)");
       return;
     }
+    if (idRaw.length > 48) {
+      setMessage("내 접속 코드는 48자 이내로 입력해 주세요.");
+      return;
+    }
+    if (!isValidStudentLoginKey(idRaw)) {
+      setMessage('내 접속 코드에는 . # $ [ ] / 문자를 쓸 수 없어요.');
+      return;
+    }
+    const studentId = idRaw;
     const code = classCode.trim();
     if (!isValidClassCode(code)) {
       setMessage("반코드는 숫자 5자리로 입력해 주세요.");
@@ -827,9 +834,10 @@ export default function StudentPage() {
       }
       localStorage.setItem("math4rpg_nickname", trimmed);
       localStorage.setItem("math4rpg_class_code", code);
-      localStorage.setItem("math4rpg_character", selectedCharacterId);
-      await joinGroup(selectedGroup, sessionUserId, trimmed, code);
-      const persisted = await getStudentState(sessionUserId);
+      localStorage.setItem(STUDENT_LOGIN_ID_STORAGE_KEY, studentId);
+      localStorage.setItem(LEGACY_USER_ID_STORAGE_KEY, studentId);
+      await joinGroup(selectedGroup, studentId, trimmed, code);
+      const persisted = await getStudentState(studentId);
       const restoredLevel = persisted?.level ?? 1;
       const restoredProgress = Math.min(
         100,
@@ -845,7 +853,7 @@ export default function StudentPage() {
       }
       setJoinedGroup(selectedGroup);
       await syncStudentBattleState({
-        userId: sessionUserId,
+        userId: studentId,
         userName: trimmed,
         classCode: code,
         groupId: selectedGroup,
@@ -874,10 +882,9 @@ export default function StudentPage() {
     }
   }, [
     nickname,
-    selectedCharacterId,
+    studentLoginId,
     classCode,
     selectedGroup,
-    sessionUserId,
     playerPos,
     pushToast,
   ]);
@@ -1189,9 +1196,9 @@ export default function StudentPage() {
   const canAttemptJoin = useMemo(
     () =>
       nickname.trim().length > 0 &&
-      Boolean(selectedCharacterId) &&
+      sessionUserId.length > 0 &&
       isValidClassCode(classCode.trim()),
-    [nickname, selectedCharacterId, classCode],
+    [nickname, sessionUserId, classCode],
   );
 
   const forestScene = (
@@ -1247,24 +1254,22 @@ export default function StudentPage() {
       </div>
 
       <canvas ref={particleCanvasRef} className="game-particle-canvas" aria-hidden />
-      {selectedCharacter && (
-        <motion.div
-          className="player-sprite"
-          style={{ left: `${playerPos.x}px`, top: `${playerPos.y}px` }}
-          animate={walkFrame === 1 ? { scaleY: [1, 0.9, 1.08, 1] } : { scaleY: [1, 1.03, 1] }}
-          transition={{ duration: 0.5, ease: "easeOut" }}
-        >
-          <div
-            className="sprite-body sprite-player"
-            style={{
-              backgroundImage: `url(${selectedCharacter.sprite})`,
-              backgroundPosition: `${-walkFrame * ENTITY_SIZE}px ${
-                -FACING_ROW[playerFacing] * ENTITY_SIZE
-              }px`,
-            }}
-          />
-        </motion.div>
-      )}
+      <motion.div
+        className="player-sprite"
+        style={{ left: `${playerPos.x}px`, top: `${playerPos.y}px` }}
+        animate={walkFrame === 1 ? { scaleY: [1, 0.9, 1.08, 1] } : { scaleY: [1, 1.03, 1] }}
+        transition={{ duration: 0.5, ease: "easeOut" }}
+      >
+        <div
+          className="sprite-body sprite-player"
+          style={{
+            backgroundImage: `url(${PLAYABLE_CHARACTER.sprite})`,
+            backgroundPosition: `${-walkFrame * ENTITY_SIZE}px ${
+              -FACING_ROW[playerFacing] * ENTITY_SIZE
+            }px`,
+          }}
+        />
+      </motion.div>
       {wildMonsters.map((m, idx) => (
         <div key={m.id} className="monster-sprite" style={{ left: `${m.x}px`, top: `${m.y}px` }}>
           <div
@@ -1309,31 +1314,6 @@ export default function StudentPage() {
         </div>
         <p className="forest-ac-tagline">수학과 함께하는 작은 마을이에요</p>
 
-        {!joinedGroup ? (
-          <div className="forest-ac-villager-row" role="group" aria-label="캐릭터 선택">
-            {CHARACTER_OPTIONS.map((character, idx) => (
-              <button
-                key={character.id}
-                type="button"
-                className={`ac-villager-tile ${AC_VILLAGER_TILE_MOD[idx % AC_VILLAGER_TILE_MOD.length]} ${
-                  selectedCharacterId === character.id ? "ac-villager-tile--picked" : ""
-                }`}
-                onClick={() => setSelectedCharacterId(character.id)}
-                aria-pressed={selectedCharacterId === character.id}
-              >
-                <span
-                  className="ac-villager-tile__portrait"
-                  style={{
-                    backgroundImage: `url(${character.sprite})`,
-                    backgroundPosition: `0px ${-FACING_ROW.down * ENTITY_SIZE}px`,
-                  }}
-                />
-                <span className="ac-villager-tile__name">{character.name}</span>
-              </button>
-            ))}
-          </div>
-        ) : null}
-
         <motion.div
           className="item-warehouse"
           aria-label="아이템 창고"
@@ -1373,16 +1353,6 @@ export default function StudentPage() {
         {!joinedGroup ? (
           <div className="forest-gate-form">
             <label className="forest-gate-field">
-              <span className="forest-gate-label">닉네임</span>
-              <input
-                className="forest-gate-input"
-                value={nickname}
-                onChange={(e) => setNickname(e.target.value)}
-                placeholder="이름을 적어 주세요"
-                autoComplete="nickname"
-              />
-            </label>
-            <label className="forest-gate-field">
               <span className="forest-gate-label">반코드</span>
               <input
                 className="forest-gate-input forest-gate-input--code"
@@ -1390,6 +1360,31 @@ export default function StudentPage() {
                 onChange={(e) => setClassCode(e.target.value.replace(/\D/g, "").slice(0, 5))}
                 placeholder="5자리"
                 inputMode="numeric"
+              />
+            </label>
+            <label className="forest-gate-field">
+              <span className="forest-gate-label">내 접속 코드</span>
+              <input
+                className="forest-gate-input"
+                value={studentLoginId}
+                onChange={(e) => setStudentLoginId(e.target.value)}
+                placeholder="예: 번호·이니셜 (다시 올 때 동일하게)"
+                autoComplete="off"
+                spellCheck={false}
+                maxLength={48}
+              />
+            </label>
+            <p className="forest-gate-field-hint" style={{ margin: "-4px 0 4px", fontSize: "0.85rem", color: "#64748b" }}>
+              같은 코드로 들어오면 레벨·진행이 그대로 이어집니다. 잊어버리면 새 사람으로 시작해요.
+            </p>
+            <label className="forest-gate-field">
+              <span className="forest-gate-label">닉네임</span>
+              <input
+                className="forest-gate-input"
+                value={nickname}
+                onChange={(e) => setNickname(e.target.value)}
+                placeholder="이름을 적어 주세요"
+                autoComplete="nickname"
               />
             </label>
             <label className="forest-gate-field forest-gate-field--select">
@@ -1410,7 +1405,7 @@ export default function StudentPage() {
         ) : (
           <div className="forest-hub-status">
             <p className="forest-hub-status__line">
-              <strong>{selectedCharacter?.name ?? "—"}</strong> · {joinedGroup}모둠 참가 중 · Lv{playerLevel}{" "}
+              <strong>{PLAYABLE_CHARACTER.name}</strong> · {joinedGroup}모둠 참가 중 · Lv{playerLevel}{" "}
               (차시 {lesson}) · HP {hp}
             </p>
             <button type="button" className="forest-hub-leave-btn" onClick={() => void handleLeave()}>
@@ -1587,7 +1582,7 @@ export default function StudentPage() {
                     </span>
                     <span className="ac-enter-btn__label">를 눌러 숲으로 입장</span>
                   </button>
-                  <p className="ac-enter-sub">닉네임·반코드·캐릭터를 준비한 뒤 눌러 주세요</p>
+                  <p className="ac-enter-sub">반코드·내 접속 코드·닉네임을 입력한 뒤 눌러 주세요</p>
                 </div>
               </div>
             ) : (
