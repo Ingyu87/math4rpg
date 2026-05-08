@@ -191,6 +191,12 @@ export default function AdminPage() {
   }, [selectedStudentId]);
 
   useEffect(() => {
+    // 학생 데이터가 바뀌면 기존 AI 모둠 분석은 오래된 스냅샷이므로 초기화
+    setAiGroupReport(null);
+    setAiGroupError("");
+  }, [groupStatsForAi]);
+
+  useEffect(() => {
     setSelectedStudentIdsForDelete(new Set());
     setAdminStudentDeleteMsg("");
     setBulkExportMsg("");
