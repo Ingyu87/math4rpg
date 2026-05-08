@@ -11,8 +11,6 @@ import {
 import type { GroupId } from "../types/game";
 import { realtimeDb } from "../config/firebase";
 
-const MAX_GROUP_SIZE = 5;
-
 export interface GroupSessionInfo {
   userId: string;
   userName: string;
@@ -64,16 +62,6 @@ function normalizeClassCode(value: unknown): string {
   return String(value ?? "").trim();
 }
 
-function countMembersByClass(
-  members: Record<string, GroupSessionInfo>,
-  classCode: string,
-): number {
-  const normalized = normalizeClassCode(classCode);
-  return Object.values(members).filter(
-    (member) => normalizeClassCode(member?.classCode) === normalized,
-  ).length;
-}
-
 async function setOnlineCountFromMembers(groupId: GroupId) {
   const snap = await get(membersRootRef(realtimeDb, groupId));
   const n = snap.exists() ? Object.keys(snap.val() as object).length : 0;
@@ -109,7 +97,7 @@ export async function joinGroup(
     joinedAt,
   };
 
-  const tx = await runTransaction(membersRoot, (current) => {
+  await runTransaction(membersRoot, (current) => {
     const cur = parseMembersMap(current);
     const currentUser = cur[userId];
     const next = { ...cur };
@@ -120,17 +108,9 @@ export async function joinGroup(
       return next;
     }
 
-    // 같은 모둠의 다른 반 학생은 정원 계산에서 제외
-    if (countMembersByClass(cur, classCode) >= MAX_GROUP_SIZE) {
-      return;
-    }
     next[userId] = session;
     return next;
   });
-
-  if (!tx.committed) {
-    throw new Error("선택한 모둠 인원이 가득 찼습니다.");
-  }
 
   await setOnlineCountFromMembers(groupId);
 
@@ -211,7 +191,7 @@ export async function getStudentState(userId: string): Promise<PersistedStudentS
   };
 }
 
-/** 드롭다운 (n/5): `members` 실제 키 개수 기준 — `onlineCount`와 불일치해도 화면은 멤버 기준 */
+/** 드롭다운 현재 인원: 같은 반 기준 `members` 수 — `onlineCount`와 불일치해도 화면은 멤버 기준 */
 export function subscribeGroupCounts(
   classCode: string,
   callback: (counts: Record<number, number>) => void,
@@ -244,7 +224,7 @@ export type GroupMemberSummary = {
   joinedAt: number;
 };
 
-/** 같은 모둠에 입장한 멤버 목록 (입장 순). 최대 5명 */
+/** 같은 모둠에 입장한 멤버 목록 (입장 순) */
 export function subscribeGroupMembers(
   groupId: GroupId,
   classCode: string,

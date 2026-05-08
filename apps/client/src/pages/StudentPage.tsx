@@ -188,7 +188,7 @@ const MAP_OBSTACLES: Rect[] = [
   { x: 420, y: 230, width: 130, height: 46 },
 ];
 
-/** 이동 방향 스프라이트: 상·우·하·좌 4방향 × 3프레임 (모둠 최대 5명과는 별개) */
+/** 이동 방향 스프라이트: 상·우·하·좌 4방향 × 3프레임 */
 const FACING_ROW: Record<Facing, number> = {
   up: 0,
   right: 1,
@@ -1399,11 +1399,11 @@ export default function StudentPage() {
                 value={selectedGroup}
                 onChange={(e) => setSelectedGroup(Number(e.target.value) as GroupId)}
               >
-                <option value={1}>1모둠 ({counts[1]}/5)</option>
-                <option value={2}>2모둠 ({counts[2]}/5)</option>
-                <option value={3}>3모둠 ({counts[3]}/5)</option>
-                <option value={4}>4모둠 ({counts[4]}/5)</option>
-                <option value={5}>5모둠 ({counts[5]}/5)</option>
+                <option value={1}>1모둠 ({counts[1]}명)</option>
+                <option value={2}>2모둠 ({counts[2]}명)</option>
+                <option value={3}>3모둠 ({counts[3]}명)</option>
+                <option value={4}>4모둠 ({counts[4]}명)</option>
+                <option value={5}>5모둠 ({counts[5]}명)</option>
               </select>
             </label>
           </div>
