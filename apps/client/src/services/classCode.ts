@@ -234,24 +234,39 @@ function toActivityLog(groupId: GroupId, id: string, value: any): ActivityLog {
   };
 }
 
+/** 반코드에 해당하는 활동로그 전부 (시간 내림차순). 실시간 구독·일괄 내보내기 공통 */
+export function collectActivityLogsForClass(raw: unknown, classCode: string): ActivityLog[] {
+  const root = (raw ?? {}) as Record<string, Record<string, unknown>>;
+  const merged: ActivityLog[] = [];
+  [1, 2, 3, 4, 5].forEach((groupNum) => {
+    const groupLogs = root[String(groupNum)] ?? {};
+    Object.entries(groupLogs).forEach(([id, value]) => {
+      const item = toActivityLog(groupNum as GroupId, id, value);
+      if (item.classCode === classCode) {
+        merged.push(item);
+      }
+    });
+  });
+  merged.sort((a, b) => b.at - a.at);
+  return merged;
+}
+
+/** 관리자 일괄 리포트용: 구독 제한 없이 해당 반 로그 전체 조회 */
+export async function fetchAllActivityLogsForClass(classCode: string): Promise<ActivityLog[]> {
+  if (!isValidClassCode(classCode)) {
+    throw new Error("유효한 반코드가 아닙니다.");
+  }
+  const snapshot = await get(ref(realtimeDb, "activityLogs"));
+  return collectActivityLogsForClass(snapshot.val(), classCode);
+}
+
 export function subscribeActivityLogsByClassCode(
   classCode: string,
   callback: (logs: ActivityLog[]) => void,
 ): Unsubscribe {
   const rootRef = ref(realtimeDb, "activityLogs");
   return onValue(rootRef, (snapshot) => {
-    const raw = snapshot.val() ?? {};
-    const merged: ActivityLog[] = [];
-    [1, 2, 3, 4, 5].forEach((groupNum) => {
-      const groupLogs = raw?.[String(groupNum)] ?? {};
-      Object.entries(groupLogs).forEach(([id, value]) => {
-        const item = toActivityLog(groupNum as GroupId, id, value);
-        if (item.classCode === classCode) {
-          merged.push(item);
-        }
-      });
-    });
-    merged.sort((a, b) => b.at - a.at);
+    const merged = collectActivityLogsForClass(snapshot.val(), classCode);
     callback(merged.slice(0, 50));
   });
 }
@@ -312,4 +327,74 @@ export async function resetClassProgressAndActivity(classCode: string): Promise<
   }
 
   return { removedStudents, removedLogs };
+}
+
+/** 선택한 학생의 RTDB 레코드(학생 노드·모둠 멤버·해당 반 활동로그) 삭제 */
+export async function deleteStudentsFromClass(
+  classCode: string,
+  studentUserIds: string[],
+): Promise<{ deletedStudents: number; removedLogs: number }> {
+  if (!isValidClassCode(classCode)) {
+    throw new Error("유효한 반코드가 아닙니다.");
+  }
+  const unique = [...new Set(studentUserIds.map((id) => String(id).trim()).filter(Boolean))];
+  if (unique.length === 0) {
+    return { deletedStudents: 0, removedLogs: 0 };
+  }
+
+  const studentsSnap = await get(ref(realtimeDb, "students"));
+  const studentsRaw = (studentsSnap.val() ?? {}) as Record<string, unknown>;
+  const touchedGroupIds = new Set<number>();
+  const studentRemovals: Promise<void>[] = [];
+  let deletedStudents = 0;
+
+  for (const userId of unique) {
+    const value = studentsRaw[userId];
+    if (!value || typeof value !== "object" || String((value as { classCode?: string }).classCode ?? "") !== classCode) {
+      continue;
+    }
+    deletedStudents += 1;
+    const gid = Number((value as { groupId?: unknown }).groupId ?? 0);
+    if (Number.isInteger(gid) && gid >= 1 && gid <= 5) {
+      touchedGroupIds.add(gid);
+      studentRemovals.push(remove(ref(realtimeDb, `groups/${gid}/members/${userId}`)));
+    }
+    studentRemovals.push(remove(ref(realtimeDb, `students/${userId}`)));
+  }
+
+  if (studentRemovals.length > 0) {
+    await Promise.all(studentRemovals);
+  }
+
+  if (touchedGroupIds.size > 0) {
+    await Promise.all(
+      [...touchedGroupIds].map(async (gid) => {
+        const membersSnap = await get(ref(realtimeDb, `groups/${gid}/members`));
+        const count = membersSnap.exists() ? Object.keys(membersSnap.val() as object).length : 0;
+        await set(ref(realtimeDb, `groups/${gid}/onlineCount`), count);
+      }),
+    );
+  }
+
+  const idSet = new Set(unique);
+  const logsSnap = await get(ref(realtimeDb, "activityLogs"));
+  const logsRaw = (logsSnap.val() ?? {}) as Record<string, Record<string, unknown>>;
+  const logRemovals: Promise<void>[] = [];
+  let removedLogs = 0;
+  for (const gid of ["1", "2", "3", "4", "5"]) {
+    const groupLogs = logsRaw[gid] ?? {};
+    for (const [logId, logValue] of Object.entries(groupLogs)) {
+      if (!logValue || typeof logValue !== "object") continue;
+      const v = logValue as { classCode?: string; userId?: string };
+      if (String(v?.classCode ?? "") !== classCode) continue;
+      if (!idSet.has(String(v?.userId ?? ""))) continue;
+      removedLogs += 1;
+      logRemovals.push(remove(ref(realtimeDb, `activityLogs/${gid}/${logId}`)));
+    }
+  }
+  if (logRemovals.length > 0) {
+    await Promise.all(logRemovals);
+  }
+
+  return { deletedStudents, removedLogs };
 }

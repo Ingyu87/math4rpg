@@ -14,12 +14,18 @@ import {
 } from "../services/adminAuth";
 import {
   createTeacherClassCode,
+  deleteStudentsFromClass,
   ensureTeacherClassCode,
+  fetchAllActivityLogsForClass,
   resetClassProgressAndActivity,
   subscribeActivityLogsByClassCode,
   subscribeStudentsByClassCode,
 } from "../services/classCode";
 import { adminRemoveStudentFromGroup } from "../services/groupSession";
+import {
+  downloadClassReportsDocx,
+  downloadClassReportsExcel,
+} from "../services/studentReportExport";
 import {
   generateAiStudentReport,
   generateAiGroupAnalysis,
@@ -68,13 +74,20 @@ export default function AdminPage() {
   const [selectedStudentId, setSelectedStudentId] = useState<string>("");
   const [adminGroupMsg, setAdminGroupMsg] = useState<string>("");
   const [adminResetMsg, setAdminResetMsg] = useState<string>("");
+  const [adminStudentDeleteMsg, setAdminStudentDeleteMsg] = useState("");
   const [isResettingClass, setIsResettingClass] = useState(false);
+  const [isDeletingSelectedStudents, setIsDeletingSelectedStudents] = useState(false);
+  const [selectedStudentIdsForDelete, setSelectedStudentIdsForDelete] = useState<Set<string>>(
+    () => new Set(),
+  );
   const [aiReport, setAiReport] = useState<AiStudentReport | null>(null);
   const [aiReportError, setAiReportError] = useState("");
   const [aiReportLoading, setAiReportLoading] = useState(false);
   const [aiGroupReport, setAiGroupReport] = useState<AiGroupAnalysis | null>(null);
   const [aiGroupError, setAiGroupError] = useState("");
   const [aiGroupLoading, setAiGroupLoading] = useState(false);
+  const [bulkExportBusy, setBulkExportBusy] = useState(false);
+  const [bulkExportMsg, setBulkExportMsg] = useState("");
 
   useEffect(() => observeAdminAuth(setAdminUser), []);
 
@@ -176,6 +189,12 @@ export default function AdminPage() {
     setAiReport(null);
     setAiReportError("");
   }, [selectedStudentId]);
+
+  useEffect(() => {
+    setSelectedStudentIdsForDelete(new Set());
+    setAdminStudentDeleteMsg("");
+    setBulkExportMsg("");
+  }, [classCode]);
 
   const selectedStudentReport = useMemo(() => {
     if (!selectedStudent) return null;
@@ -306,7 +325,7 @@ export default function AdminPage() {
                     <p>평균 정답률: {row.avgAccuracy}%</p>
                     <p>평균 레벨: Lv{row.avgLevel}</p>
                     <p>
-                      참여/접속: {row.memberCount}명 / {row.onlineCount}명
+                      참여 인원 {row.memberCount}명 · 접속 중 {row.onlineCount}명
                     </p>
                   </div>
                 )}
@@ -388,8 +407,111 @@ export default function AdminPage() {
 
       <section className="page-card">
         <h3>학생 성취수준</h3>
-        <p>레벨을 기준으로 계산 숙련도를 해석해 보여줍니다. 필요한 경우 반 전체 학습 상태를 초기화할 수 있습니다.</p>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
+        <p>
+          레벨을 기준으로 계산 숙련도를 해석해 보여줍니다. 표 왼쪽에서 학생을 선택한 뒤「선택 학생 데이터 삭제」로 해당 학생만 지우거나, 반 전체를 한 번에 초기화할 수 있습니다.
+        </p>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10, alignItems: "center" }}>
+          <button
+            type="button"
+            disabled={!classCode || bulkExportBusy}
+            onClick={async () => {
+              if (!classCode) return;
+              try {
+                setBulkExportBusy(true);
+                setBulkExportMsg("");
+                const logs = await fetchAllActivityLogsForClass(classCode);
+                downloadClassReportsExcel({
+                  classCode,
+                  teacherEmail: adminUser.email ?? "",
+                  students,
+                  activityLogs: logs,
+                });
+                setBulkExportMsg(
+                  `Excel 저장 완료 · 학생 ${students.length}명 · 활동 로그 ${logs.length}건`,
+                );
+              } catch (error) {
+                setBulkExportMsg(
+                  error instanceof Error ? error.message : "Excel 내보내기에 실패했습니다.",
+                );
+              } finally {
+                setBulkExportBusy(false);
+              }
+            }}
+          >
+            {bulkExportBusy ? "파일 준비 중..." : "학생 레포트 전체 · Excel (.xlsx)"}
+          </button>
+          <button
+            type="button"
+            disabled={!classCode || bulkExportBusy}
+            onClick={async () => {
+              if (!classCode) return;
+              try {
+                setBulkExportBusy(true);
+                setBulkExportMsg("");
+                const logs = await fetchAllActivityLogsForClass(classCode);
+                await downloadClassReportsDocx({
+                  classCode,
+                  teacherEmail: adminUser.email ?? "",
+                  students,
+                  activityLogs: logs,
+                });
+                setBulkExportMsg(
+                  `Word 저장 완료 · 학생 ${students.length}명 · 활동 로그 ${logs.length}건`,
+                );
+              } catch (error) {
+                setBulkExportMsg(
+                  error instanceof Error ? error.message : "Word 내보내기에 실패했습니다.",
+                );
+              } finally {
+                setBulkExportBusy(false);
+              }
+            }}
+          >
+            학생 레포트 전체 · Word (.docx)
+          </button>
+        </div>
+        {bulkExportMsg ? <p style={{ marginBottom: 10 }}>{bulkExportMsg}</p> : null}
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10, alignItems: "center" }}>
+          <button
+            type="button"
+            disabled={
+              !classCode ||
+              selectedStudentIdsForDelete.size === 0 ||
+              isDeletingSelectedStudents ||
+              isResettingClass
+            }
+            onClick={async () => {
+              if (!classCode || selectedStudentIdsForDelete.size === 0) return;
+              const ids = [...selectedStudentIdsForDelete];
+              const picked = students.filter((s) => ids.includes(s.id));
+              const ok = window.confirm(
+                `선택한 ${picked.length}명의 학습 데이터를 삭제할까요?\n\n${picked.map((s) => `· ${s.name} (${s.id})`).join("\n")}\n\n삭제 후에는 되돌릴 수 없습니다.`,
+              );
+              if (!ok) return;
+              try {
+                setIsDeletingSelectedStudents(true);
+                setAdminStudentDeleteMsg("");
+                const result = await deleteStudentsFromClass(classCode, ids);
+                setSelectedStudentIdsForDelete(new Set());
+                if (selectedStudentId && ids.includes(selectedStudentId)) {
+                  setSelectedStudentId("");
+                }
+                setAdminStudentDeleteMsg(
+                  result.deletedStudents === 0
+                    ? "삭제할 수 있는 학생이 없었습니다. (다른 반 소속이거나 이미 삭제됨)"
+                    : `선택 삭제 완료: 학생 ${result.deletedStudents}명, 활동로그 ${result.removedLogs}건 삭제`,
+                );
+              } catch (error) {
+                setAdminStudentDeleteMsg(
+                  error instanceof Error ? error.message : "선택 삭제 처리 중 오류가 발생했습니다.",
+                );
+              } finally {
+                setIsDeletingSelectedStudents(false);
+              }
+            }}
+          >
+            {isDeletingSelectedStudents ? "삭제 처리 중..." : "선택 학생 데이터 삭제"}
+          </button>
           <button
             type="button"
             disabled={!classCode || isResettingClass}
@@ -406,6 +528,8 @@ export default function AdminPage() {
                 setIsResettingClass(true);
                 setAdminResetMsg("");
                 const result = await resetClassProgressAndActivity(classCode);
+                setSelectedStudentIdsForDelete(new Set());
+                setSelectedStudentId("");
                 setAdminResetMsg(
                   `초기화 완료: 학생 ${result.removedStudents}명 삭제, 활동로그 ${result.removedLogs}건 삭제`,
                 );
@@ -421,12 +545,29 @@ export default function AdminPage() {
             {isResettingClass ? "초기화 처리 중..." : "이 반 활동로그 + 성취수준 초기화"}
           </button>
         </div>
+        {adminStudentDeleteMsg ? <p>{adminStudentDeleteMsg}</p> : null}
         {adminResetMsg ? <p>{adminResetMsg}</p> : null}
         <p>모둠에 참가 중인 학생을 반에서 제외하면 RTDB가 갱신되고, 학생 화면에서도 모둠 참가가 해제됩니다.</p>
         {adminGroupMsg ? <p>{adminGroupMsg}</p> : null}
         <table className="student-table">
           <thead>
             <tr>
+              <th scope="col" aria-label="전체 선택">
+                <input
+                  type="checkbox"
+                  title="현재 목록 전체 선택"
+                  checked={
+                    students.length > 0 && students.every((s) => selectedStudentIdsForDelete.has(s.id))
+                  }
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      setSelectedStudentIdsForDelete(new Set(students.map((s) => s.id)));
+                    } else {
+                      setSelectedStudentIdsForDelete(new Set());
+                    }
+                  }}
+                />
+              </th>
               <th>이름</th>
               <th>모둠</th>
               <th>레벨</th>
@@ -448,6 +589,21 @@ export default function AdminPage() {
             )}
             {students.map((student) => (
               <tr key={student.id}>
+                <td>
+                  <input
+                    type="checkbox"
+                    checked={selectedStudentIdsForDelete.has(student.id)}
+                    onChange={() => {
+                      setSelectedStudentIdsForDelete((prev) => {
+                        const next = new Set(prev);
+                        if (next.has(student.id)) next.delete(student.id);
+                        else next.add(student.id);
+                        return next;
+                      });
+                    }}
+                    aria-label={`${student.name} 선택`}
+                  />
+                </td>
                 <td>{student.name}</td>
                 <td>{student.groupId == null ? "미참가" : `${student.groupId}모둠`}</td>
                 <td>{student.level}</td>
