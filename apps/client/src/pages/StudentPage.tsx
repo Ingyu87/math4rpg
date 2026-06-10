@@ -25,7 +25,7 @@ import {
   classCodeExists,
   emptyLiveRankingsBundle,
   isValidClassCode,
-  subscribeLevelRankingsByClassCode,
+  subscribeOverallRankingsByClassCode,
   type LevelRankingEntry,
   type LiveRankingsBundle,
 } from "../services/classCode";
@@ -202,7 +202,7 @@ const LEGACY_USER_ID_STORAGE_KEY = "math4rpg_user_id";
 function isValidStudentLoginKey(id: string): boolean {
   const t = id.trim();
   if (!t || t.length > 48) return false;
-  return !/[.#$\[\]/]/.test(t);
+  return !/[.#$[\]/]/.test(t);
 }
 
 function formatDuration(seconds: number) {
@@ -395,7 +395,6 @@ export default function StudentPage() {
   const [wildMonsters, setWildMonsters] = useState<WildMonster[]>(() => spawnWildMonsters());
   const [monsterFrame, setMonsterFrame] = useState(0);
   const [liveRankings, setLiveRankings] = useState<LiveRankingsBundle>(() => emptyLiveRankingsBundle());
-  const [rankingTab, setRankingTab] = useState(1);
   const [rankingScope, setRankingScope] = useState<RankingScope>("class");
   const [groupMembers, setGroupMembers] = useState<GroupMemberSummary[]>([]);
   const [isStateHydrated, setIsStateHydrated] = useState(false);
@@ -506,12 +505,8 @@ export default function StudentPage() {
       setLiveRankings(emptyLiveRankingsBundle());
       return;
     }
-    return subscribeLevelRankingsByClassCode(classCode.trim(), setLiveRankings);
+    return subscribeOverallRankingsByClassCode(classCode.trim(), setLiveRankings);
   }, [joinedGroup, classCode]);
-
-  useEffect(() => {
-    if (joinedGroup) setRankingTab(playerLevel);
-  }, [joinedGroup, playerLevel]);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -572,6 +567,8 @@ export default function StudentPage() {
         setHp(persisted.hp ?? 100);
         setAppearanceTier(persisted.appearanceTier ?? 1);
         setEarnedItems(persisted.earnedItems ?? []);
+        setTotalAttempts(persisted.totalAttempts ?? 0);
+        setTotalCorrect(persisted.totalCorrect ?? 0);
       }
       setIsStateHydrated(true);
     })();
@@ -850,6 +847,8 @@ export default function StudentPage() {
         setHp(persisted.hp ?? 100);
         setAppearanceTier(persisted.appearanceTier ?? 1);
         setEarnedItems(persisted.earnedItems ?? []);
+        setTotalAttempts(persisted.totalAttempts ?? 0);
+        setTotalCorrect(persisted.totalCorrect ?? 0);
       }
       setJoinedGroup(selectedGroup);
       await syncStudentBattleState({
@@ -860,6 +859,8 @@ export default function StudentPage() {
         level: restoredLevel,
         levelProgress: restoredProgress,
         recentAccuracy: Math.min(100, Math.max(0, Math.round(Number(persisted?.recentAccuracy ?? 0)))),
+        totalAttempts: persisted?.totalAttempts ?? 0,
+        totalCorrect: persisted?.totalCorrect ?? 0,
         wrongStreak: persisted?.wrongStreak ?? 0,
         hp: persisted?.hp ?? 100,
         appearanceTier: persisted?.appearanceTier ?? 1,
@@ -1113,6 +1114,8 @@ export default function StudentPage() {
       level: playerLevel,
       levelProgress: progressPercent,
       recentAccuracy,
+      totalAttempts,
+      totalCorrect,
       wrongStreak,
       hp,
       appearanceTier,
@@ -1126,6 +1129,8 @@ export default function StudentPage() {
     playerLevel,
     progressPercent,
     recentAccuracy,
+    totalAttempts,
+    totalCorrect,
     wrongStreak,
     hp,
     appearanceTier,
@@ -1135,7 +1140,7 @@ export default function StudentPage() {
 
   const displayMembers = useMemo((): GroupMemberSummary[] => {
     if (!joinedGroup) return [];
-    let list: GroupMemberSummary[] =
+    const list: GroupMemberSummary[] =
       groupMembers.length > 0
         ? [...groupMembers]
         : [{ userId: sessionUserId, userName: nickname.trim() || "나", joinedAt: 0 }];
@@ -1153,45 +1158,43 @@ export default function StudentPage() {
   const partySize = displayMembers.length;
 
   const rankingRows: LevelRankingEntry[] = useMemo(() => {
-    const lv = rankingTab;
-    if (rankingScope === "class") return liveRankings.classByLevel[lv] ?? [];
+    if (rankingScope === "class") return liveRankings.classOverall;
     if (rankingScope === "myGroup" && joinedGroup != null) {
-      return liveRankings.perGroupByLevel[lv]?.[joinedGroup] ?? [];
+      return liveRankings.perGroupOverall[joinedGroup] ?? [];
     }
     return [];
-  }, [liveRankings, rankingTab, rankingScope, joinedGroup]);
+  }, [liveRankings, rankingScope, joinedGroup]);
 
   const rankingSubLine = useMemo(() => {
-    const lesson = getLessonByLevel(rankingTab);
     if (rankingScope === "class") {
-      return `반 전체 개인 랭킹 · 레벨 ${rankingTab} (차시 ${lesson})`;
+      return "반 전체 개인 랭킹 · 전체 점수";
     }
     if (rankingScope === "myGroup" && joinedGroup != null) {
-      return `${joinedGroup}모둠 내 개인 랭킹 · 레벨 ${rankingTab} (차시 ${lesson})`;
+      return `${joinedGroup}모둠 내 개인 랭킹 · 전체 점수`;
     }
-    return `모둠 대항 랭킹 · 레벨 ${rankingTab} (차시 ${lesson})`;
-  }, [rankingScope, rankingTab, joinedGroup]);
+    return "모둠 대항 랭킹 · 전체 점수";
+  }, [rankingScope, joinedGroup]);
 
   const groupRankingRows = useMemo(() => {
-    const groups = liveRankings.perGroupByLevel[rankingTab] ?? {};
+    const groups = liveRankings.perGroupOverall;
     const rows = ([1, 2, 3, 4, 5] as GroupId[]).map((gid) => {
       const members = groups[gid] ?? [];
       const memberCount = members.length;
-      const totalProgress = members.reduce((sum, row) => sum + row.levelProgress, 0);
+      const totalScore = members.reduce((sum, row) => sum + row.totalScore, 0);
       const totalAccuracy = members.reduce((sum, row) => sum + row.recentAccuracy, 0);
-      const avgProgress = memberCount > 0 ? Math.round(totalProgress / memberCount) : 0;
+      const avgScore = memberCount > 0 ? Math.round(totalScore / memberCount) : 0;
       const avgAccuracy = memberCount > 0 ? Math.round(totalAccuracy / memberCount) : 0;
-      const topProgress = memberCount > 0 ? Math.max(...members.map((row) => row.levelProgress)) : 0;
+      const topScore = memberCount > 0 ? Math.max(...members.map((row) => row.totalScore)) : 0;
       const onlineCount = members.filter((row) => row.online).length;
-      return { groupId: gid, memberCount, avgProgress, avgAccuracy, topProgress, onlineCount };
+      return { groupId: gid, memberCount, avgScore, avgAccuracy, topScore, onlineCount };
     });
     return rows.sort((a, b) => {
+      if (b.avgScore !== a.avgScore) return b.avgScore - a.avgScore;
       if (b.avgAccuracy !== a.avgAccuracy) return b.avgAccuracy - a.avgAccuracy;
-      if (b.avgProgress !== a.avgProgress) return b.avgProgress - a.avgProgress;
       if (b.memberCount !== a.memberCount) return b.memberCount - a.memberCount;
-      return b.topProgress - a.topProgress;
+      return b.topScore - a.topScore;
     });
-  }, [liveRankings, rankingTab]);
+  }, [liveRankings]);
 
   const canAttemptJoin = useMemo(
     () =>
@@ -1641,7 +1644,7 @@ export default function StudentPage() {
                 className={`live-ranking-panel live-ranking-panel--dock${
                   rankingScope === "allGroups" ? " live-ranking-panel--by-groups" : ""
                 }`}
-                aria-label="실시간 레벨별 랭킹"
+                aria-label="실시간 전체 점수 랭킹"
                 initial={{ opacity: 0.9, x: 12 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ duration: 0.32, ease: "easeOut" }}
@@ -1672,20 +1675,6 @@ export default function StudentPage() {
                   </button>
                 </div>
                 <p className="live-ranking-sub">{rankingSubLine}</p>
-                <div className="live-ranking-tabs" role="tablist" aria-label="게임 레벨">
-                  {[1, 2, 3, 4, 5, 6].map((lv) => (
-                    <button
-                      key={lv}
-                      type="button"
-                      role="tab"
-                      aria-selected={rankingTab === lv}
-                      className={rankingTab === lv ? "active" : ""}
-                      onClick={() => setRankingTab(lv)}
-                    >
-                      Lv{lv}
-                    </button>
-                  ))}
-                </div>
                 {rankingScope === "allGroups" ? (
                   <div className="live-ranking-by-groups" aria-label="모둠 대항 랭킹">
                     {groupRankingRows.map((row, idx) => (
@@ -1703,7 +1692,7 @@ export default function StudentPage() {
                           #{idx + 1} · {row.groupId}모둠
                         </p>
                         {row.memberCount === 0 ? (
-                          <p className="live-ranking-mini__empty">해당 레벨 참여 학생 없음</p>
+                          <p className="live-ranking-mini__empty">아직 참여 학생 없음</p>
                         ) : (
                           <ol className="live-ranking-list live-ranking-list--compact">
                             <li>
@@ -1714,9 +1703,9 @@ export default function StudentPage() {
                             </li>
                             <li>
                               <span className="rank-num">·</span>
-                              <span className="rank-name">평균 성취율</span>
-                              <span className="rank-pct">{row.avgProgress}%</span>
-                              <span className="rank-meta">진도</span>
+                              <span className="rank-name">평균 점수</span>
+                              <span className="rank-pct">{row.avgScore}</span>
+                              <span className="rank-meta">점</span>
                             </li>
                             <li>
                               <span className="rank-num">·</span>
@@ -1738,7 +1727,7 @@ export default function StudentPage() {
                 ) : (
                   <ol className="live-ranking-list live-ranking-list--dock-wide">
                     {rankingRows.length === 0 ? (
-                      <li className="live-ranking-empty">이 레벨에 아직 순위가 없어요.</li>
+                      <li className="live-ranking-empty">아직 순위가 없어요.</li>
                     ) : (
                       rankingRows.map((row, idx) => (
                         <li
@@ -1747,7 +1736,7 @@ export default function StudentPage() {
                         >
                           <span className="rank-num">{idx + 1}</span>
                           <span className="rank-name">{row.name}</span>
-                          <span className="rank-pct">{row.levelProgress}%</span>
+                          <span className="rank-pct">{row.totalScore}점</span>
                           <span className="rank-meta" title={row.online ? "접속 중" : "오프라인"}>
                             {row.groupId == null ? "미참가" : `${row.groupId}모둠`}{" "}
                             {row.online ? "●" : "○"}

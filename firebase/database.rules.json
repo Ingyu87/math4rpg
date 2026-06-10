@@ -4,7 +4,7 @@
     ".write": false,
     "classrooms": {
       "$classCode": {
-        ".read": "auth != null",
+        ".read": true,
         ".write": "auth != null"
       }
     },
@@ -15,8 +15,8 @@
       }
     },
     "students": {
+      ".read": true,
       "$studentUid": {
-        ".read": "auth != null",
         ".write": "auth != null || (!auth && newData.child('classCode').isString())"
       }
     },

@@ -33,6 +33,8 @@ export interface PersistedStudentState {
   level?: number;
   levelProgress?: number;
   recentAccuracy?: number;
+  totalAttempts?: number;
+  totalCorrect?: number;
   wrongStreak?: number;
   hp?: number;
   appearanceTier?: number;
@@ -178,10 +180,22 @@ export async function getStudentState(userId: string): Promise<PersistedStudentS
   const snapshot = await get(ref(realtimeDb, `students/${userId}`));
   if (!snapshot.exists()) return null;
   const value = snapshot.val() ?? {};
+  const level = Number(value.level ?? 1);
+  const levelProgress = Number(value.levelProgress ?? 0);
+  const fallbackCorrect = Math.max(
+    0,
+    Math.round((Math.max(1, level) - 1) * 15 + (Math.max(0, levelProgress) / 100) * 15),
+  );
+  const totalCorrect = Number(value.totalCorrect ?? fallbackCorrect);
+  const recentAccuracy = Number(value.recentAccuracy ?? 0);
+  const fallbackAttempts =
+    recentAccuracy > 0 ? Math.max(totalCorrect, Math.round((totalCorrect * 100) / recentAccuracy)) : totalCorrect;
   return {
-    level: Number(value.level ?? 1),
-    levelProgress: Number(value.levelProgress ?? 0),
-    recentAccuracy: Number(value.recentAccuracy ?? 0),
+    level,
+    levelProgress,
+    recentAccuracy,
+    totalAttempts: Number(value.totalAttempts ?? fallbackAttempts),
+    totalCorrect,
     wrongStreak: Number(value.wrongStreak ?? 0),
     hp: Number(value.hp ?? 100),
     appearanceTier: Number(value.appearanceTier ?? 1),
@@ -255,6 +269,8 @@ export async function syncStudentBattleState(input: {
   level: number;
   levelProgress: number;
   recentAccuracy: number;
+  totalAttempts: number;
+  totalCorrect: number;
   wrongStreak: number;
   hp: number;
   appearanceTier: number;
@@ -274,6 +290,8 @@ export async function syncStudentBattleState(input: {
     level: input.level,
     levelProgress: input.levelProgress,
     recentAccuracy: input.recentAccuracy,
+    totalAttempts: input.totalAttempts,
+    totalCorrect: input.totalCorrect,
     wrongStreak: input.wrongStreak,
     hp: input.hp,
     appearanceTier: input.appearanceTier,

@@ -124,34 +124,41 @@ export type LevelRankingEntry = {
   name: string;
   levelProgress: number;
   recentAccuracy: number;
+  totalAttempts: number;
+  totalCorrect: number;
+  totalScore: number;
   groupId: GroupId | null;
   online: boolean;
 };
 
 const RANKING_TOP_N = 8;
 
-function emptyLevelRankings(): Record<number, LevelRankingEntry[]> {
-  return { 1: [], 2: [], 3: [], 4: [], 5: [], 6: [] };
-}
+type RankingStudentRecord = {
+  classCode?: unknown;
+  level?: unknown;
+  levelProgress?: unknown;
+  totalCorrect?: unknown;
+  totalAttempts?: unknown;
+  name?: unknown;
+  recentAccuracy?: unknown;
+  groupId?: unknown;
+  online?: unknown;
+};
 
-function emptyPerGroupByLevel(): Record<number, Record<GroupId, LevelRankingEntry[]>> {
-  const out: Record<number, Record<GroupId, LevelRankingEntry[]>> = {};
-  for (let lv = 1; lv <= 6; lv += 1) {
-    out[lv] = { 1: [], 2: [], 3: [], 4: [], 5: [] };
-  }
-  return out;
+function emptyPerGroupRankings(): Record<GroupId, LevelRankingEntry[]> {
+  return { 1: [], 2: [], 3: [], 4: [], 5: [] };
 }
 
 /** 반 전체 상위 + 레벨별 모둠(1~5) 내부 상위 */
 export type LiveRankingsBundle = {
-  classByLevel: Record<number, LevelRankingEntry[]>;
-  perGroupByLevel: Record<number, Record<GroupId, LevelRankingEntry[]>>;
+  classOverall: LevelRankingEntry[];
+  perGroupOverall: Record<GroupId, LevelRankingEntry[]>;
 };
 
 export function emptyLiveRankingsBundle(): LiveRankingsBundle {
   return {
-    classByLevel: emptyLevelRankings(),
-    perGroupByLevel: emptyPerGroupByLevel(),
+    classOverall: [],
+    perGroupOverall: emptyPerGroupRankings(),
   };
 }
 
@@ -165,6 +172,12 @@ function sortRankingEntries(
       t: Number((raw[entry.userId] as { updatedAt?: number })?.updatedAt ?? 0),
     }))
     .sort((a, b) => {
+      if (b.entry.totalScore !== a.entry.totalScore) {
+        return b.entry.totalScore - a.entry.totalScore;
+      }
+      if (b.entry.recentAccuracy !== a.entry.recentAccuracy) {
+        return b.entry.recentAccuracy - a.entry.recentAccuracy;
+      }
       if (b.entry.levelProgress !== a.entry.levelProgress) {
         return b.entry.levelProgress - a.entry.levelProgress;
       }
@@ -173,40 +186,44 @@ function sortRankingEntries(
     .map(({ entry }) => entry);
 }
 
-export function subscribeLevelRankingsByClassCode(
+export function subscribeOverallRankingsByClassCode(
   classCode: string,
   callback: (bundle: LiveRankingsBundle) => void,
 ): Unsubscribe {
   const studentsRef = ref(realtimeDb, "students");
   return onValue(studentsRef, (snapshot) => {
     const raw = snapshot.val() ?? {};
-    const buckets = emptyLevelRankings();
+    const entries: LevelRankingEntry[] = [];
     for (const [userId, value] of Object.entries(raw)) {
-      const v = value as any;
+      const v = value as RankingStudentRecord;
       if (String(v?.classCode ?? "") !== classCode) continue;
       const level = Number(v?.level ?? 1);
       if (level < 1 || level > 6) continue;
-      buckets[level].push({
+      const levelProgress = Number(v?.levelProgress ?? 0);
+      const fallbackScore = Math.max(
+        0,
+        Math.round((Math.max(1, level) - 1) * 15 + (Math.max(0, levelProgress) / 100) * 15),
+      );
+      const totalCorrect = Number(v?.totalCorrect ?? fallbackScore);
+      const totalAttempts = Number(v?.totalAttempts ?? totalCorrect);
+      entries.push({
         userId,
         name: String(v?.name ?? "학생"),
-        levelProgress: Number(v?.levelProgress ?? 0),
+        levelProgress,
         recentAccuracy: Number(v?.recentAccuracy ?? 0),
+        totalAttempts,
+        totalCorrect,
+        totalScore: totalCorrect,
         groupId: parseStudentGroupId(v?.groupId),
         online: Boolean(v?.online),
       });
     }
-    const classByLevel = emptyLevelRankings();
-    const perGroupByLevel = emptyPerGroupByLevel();
-    for (let lv = 1; lv <= 6; lv += 1) {
-      const sorted = sortRankingEntries(buckets[lv], raw);
-      classByLevel[lv] = sorted.slice(0, RANKING_TOP_N);
-      for (const gid of [1, 2, 3, 4, 5] as GroupId[]) {
-        perGroupByLevel[lv][gid] = sorted
-          .filter((e) => e.groupId === gid)
-          .slice(0, RANKING_TOP_N);
-      }
+    const sorted = sortRankingEntries(entries, raw);
+    const perGroupOverall = emptyPerGroupRankings();
+    for (const gid of [1, 2, 3, 4, 5] as GroupId[]) {
+      perGroupOverall[gid] = sorted.filter((e) => e.groupId === gid).slice(0, RANKING_TOP_N);
     }
-    callback({ classByLevel, perGroupByLevel });
+    callback({ classOverall: sorted.slice(0, RANKING_TOP_N), perGroupOverall });
   });
 }
 
